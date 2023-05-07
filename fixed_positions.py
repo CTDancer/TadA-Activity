@@ -42,6 +42,9 @@ def sample(seed, path):
     
     diff = count_diff(des.output_seq, des.wt_seq_raw)
     print(f"Output seq has changed {diff} amino acids. \n {des.output_seq}")
+    
+    if not os.path.exists(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
     with open(path, 'a') as f:
         f.write(f'>sample_iter{iteration}\n')
         f.write(f'{des.output_seq}\n')

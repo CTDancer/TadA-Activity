@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
 import logging
 
 import torch
@@ -86,6 +86,8 @@ def stage_fixedseqs(self, cfg, disable_tqdm=False):
         if step and step % cfg.save_interval == 0:
             diff_point = count_diff(self.x_seqs[0].argmax(-1), self.wt_seq[0].argmax(-1))
             print(f'Mid output ({step}/{cfg.num_iter}) has changed {diff_point} amino acids.')
+            if not os.path.exists(os.path.dirname(cfg.path)):
+                os.makedirs(os.path.dirname(cfg.path))
             with open(cfg.path, 'a') as f:
                 mid_seq = self.decode(self.x_seqs)[0]
                 f.write(f'>sample_iter{step}\n')

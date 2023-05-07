@@ -40,7 +40,7 @@ from utils.constants import COORDS_ANGLE_NAMES, COORDS4D_NAMES
 import utils.struct_models as struct_models
 from utils.free_generation import stage_free_generation
 from utils.fixedbb import stage_fixedbb
-from utils.fixedseq import stage_fixedseq, stage_fixedseqs
+from utils.fixedseq import stage_fixedseqs
 from utils.lm import WrapLmEsm
 
 from utils.tensor import (
