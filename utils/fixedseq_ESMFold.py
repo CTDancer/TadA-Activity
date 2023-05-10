@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch.distributions import Bernoulli, OneHotCategorical
 from tqdm import tqdm
-
+from openfold.np import residue_constants
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +20,20 @@ def count_diff(a, b):
     return cnt
 
 
+def substitute(s: str, i: int, target: str):
+    s = list(s)
+    s[i] = target
+    s = "".join(s)
+    return s
+
+
 @torch.no_grad()
-def stage_fixedseqs(self, cfg, disable_tqdm=False):
+def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
     """Metropolis-Hastings sampling with uniform proposal and energy-based acceptance."""
-    B, L, K = self.x_seqs.shape
+    B = 1
+    L = len(self.x_seqs)
+    vocab = residue_constants.restypes
+    K = len(vocab)
 
     # restricted regions to mutate
     choices = []
@@ -32,23 +42,19 @@ def stage_fixedseqs(self, cfg, disable_tqdm=False):
             choices.append(j)
 
     # print the loaded protein sequence
-    init_seqs = self.decode(self.x_seqs)[0]
+    init_seqs = self.x_seqs
     print(f'Init sequence: {init_seqs}')
     print(f'Mutation range: {cfg.limit_range} / {L}')
     for i in cfg.limit_range:
         print(f"Mutation strings: {init_seqs[i[0]:i[1]]}")
 
-    # uniform proposal distribution.
-    log_p_x_i = torch.full((B, K), fill_value=-float("inf")).to(self.x_seqs)  # [B, K]
-    log_p_x_i[..., self.vocab_mask_AA] = 0  # [B, K]
-    p_x_i = log_p_x_i.softmax(-1)
-
     # random init for the given range
     if cfg.limit_range_random_init:
+        
         for c in choices:
-            init_i = OneHotCategorical(probs=p_x_i).sample()
-            self.x_seqs[0, c] = init_i
-        print(f'Random init sequence: {self.decode(self.x_seqs)[0]}')
+            init_i = torch.randint(0, K, (B, ))
+            self.x_seqs = substitute(self.x_seqs, c, vocab[init_i[0]])
+        print(f'Random init sequence: {self.x_seqs}')
     
     self.best_seq = []
     itr = self.stepper(range(cfg.num_iter), cfg=cfg)
@@ -62,13 +68,9 @@ def stage_fixedseqs(self, cfg, disable_tqdm=False):
         ##############################
         # Decide which position to mutate == {i}.
         # mask 1 place
-        mask = torch.zeros((B, L, 1), dtype=torch.bool).to(x)  # [B,L,1]
         idx = torch.randint(0, len(choices), (B,))
-        mask[:, choices[idx]] = True  # [1,L,1]
-        mask = mask.bool()
-
-        xp_i = OneHotCategorical(probs=p_x_i).sample()
-        xp = x.masked_scatter(mask, xp_i)  # [B,L,K]
+        target = torch.randint(0, K, (B,))
+        xp = substitute(x, choices[idx[0]], vocab[target[0]])
 
         ##############################
         # Accept / reject
@@ -76,11 +78,11 @@ def stage_fixedseqs(self, cfg, disable_tqdm=False):
         # log A(x',x) = log P(x') - log P(x))
         # for current input x, proposal x', target distribution P and symmetric proposal.
         if not self.best_seq:
-            log_P_x = self.calc_total_loss(x, mask, **a_cfg.energy_cfg)[0]  # [B]
+            log_P_x = self.calc_total_loss(x, **a_cfg.energy_cfg)[0]  # [B]
             self.best_seq.append([-1, log_P_x.item(), x])
             # import pdb; pdb.set_trace()
 
-        log_P_xp = self.calc_total_loss(xp, mask, **a_cfg.energy_cfg)[0]  # [B]
+        log_P_xp = self.calc_total_loss(xp, **a_cfg.energy_cfg)[0]  # [B]
         if len(self.best_seq) < 5 or log_P_xp < self.best_seq[-1][1]:
             print(step, log_P_xp.item())
             self.best_seq.append([step, log_P_xp.item(), xp])
@@ -88,19 +90,19 @@ def stage_fixedseqs(self, cfg, disable_tqdm=False):
         log_A_xp_x = (-log_P_xp - -log_P_x) / a_cfg.temperature  # [B]
         A_xp_x = (log_A_xp_x).exp().clamp(0, 1)  # [B]
         # A_xp_x = log_A_xp_x.sigmoid()  # [B]
+        # import pdb; pdb.set_trace()
         A_bools = Bernoulli(A_xp_x).sample().bool()  # [B]
-        self.x_seqs = torch.where(A_bools[:, None, None], xp, x)  # [B,L,K]
-        if A_bools[0]:
+        self.x_seqs = xp if A_bools else x
+        if A_bools:
             log_P_x = log_P_xp.clone()
 
         # print and save mid outputs
         if step and step % cfg.save_interval == 0:
-            diff_point = count_diff(self.x_seqs[0].argmax(-1), self.wt_seq[0].argmax(-1))
+            diff_point = count_diff(self.x_seqs, init_seqs)
             # print(f'Mid output ({step}/{cfg.num_iter}) has changed {diff_point} amino acids.')
             if not os.path.exists(os.path.dirname(cfg.path)):
                 os.makedirs(os.path.dirname(cfg.path))
             with open(cfg.path, 'a') as f:
-                mid_seq = self.decode(self.x_seqs)[0]
                 f.write(f'>sample_iter{step}\n')
-                f.write(f'{mid_seq}\n')
-                # print(f"Write to {cfg.path}: \n {mid_seq}")
+                f.write(f'{self.x_seqs}\n')
+                # print(f"Write to {cfg.path}: \n {self.x_seqs}")

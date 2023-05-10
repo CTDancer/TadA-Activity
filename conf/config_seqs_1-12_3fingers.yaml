@@ -37,14 +37,14 @@ tasks:
               ngram_w: 0
               ngram_orders: [1,2,3]
               dist_w: 1
-              objects: [[[0, 1], [57, 69]], [[0, 1], [83, 92]], [[0, 1], [131, 142]]]
+              objects: [[[0, 1], [57, 69]], [[0, 1], [83, 92]], [[0, 1], [131, 142]], [[12, 13], [57, 69]], [[12, 13], [83, 92]], [[12, 13], [131, 142]]]
               selection: min
               reduction: mean
           temperature:
               scheduler: StepLR
-              step_size: 10000
+              step_size: 10000000
               gamma: 0.5
-              initial: 1
+              initial: 0.001
       limit_range: [[57, 69], [83, 92], [131, 142]]
       path: '.'
       save_interval: 100

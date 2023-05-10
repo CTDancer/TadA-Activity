@@ -10,8 +10,7 @@ allow_missing_residue_coords: True
 # suppress_AA: 'C'
 disable_cuda: False
 cuda_device_idx:  # Set to numberic value to override default GPU device used.
-task: fixedseqs  # fixedbb or free_generation or fixedpos
-pdb_fn:  # set as empty string when using free_generation
+task: fixedseqs_fold  # fixedbb or free_generation or fixedpos
 free_generation_length: 100
 seq_init_random: False
 
@@ -22,7 +21,7 @@ tasks:
       resample_y_temp: 1
       stage_fixedbb_args: ${tasks.fixedbb}
      
-  fixedseqs:
+  fixedseqs_fold:
       num_iter: 170000
 
       # Accept/Reject
@@ -36,10 +35,11 @@ tasks:
               LM_w: 0
               ngram_w: 0
               ngram_orders: [1,2,3]
-              dist_w: 1
+              dist_w: 0
               objects: [[[0, 1], [57, 69]], [[0, 1], [83, 92]], [[0, 1], [131, 142]]]
               selection: min
               reduction: mean
+              fold_w: 1
           temperature:
               scheduler: StepLR
               step_size: 10000

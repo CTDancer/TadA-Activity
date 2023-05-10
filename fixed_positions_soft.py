@@ -13,15 +13,15 @@ def count_diff(a, b):
 
 
 def sample(seed, path):
-    pdb_fn = os.getcwd() + '/data/ESM5.pdb'
+    pdb_fn = os.getcwd() + '/data/SARS_single.pdb'
     TASK = "fixedseqs"
-    iteration = 10000
+    iteration = 1000
     save_interval = 10
 
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
         cfg = hydra.compose(
-            config_name="config_seqs_3fingers", 
+            config_name="config_sars_single_3fingers", 
             overrides=[
                 f"task={TASK}", 
                 f"seed={seed}", 
@@ -29,8 +29,7 @@ def sample(seed, path):
                 "seq_init_random=False",
                 f'tasks.fixedseqs.path={path}',
                 f'tasks.fixedseqs.save_interval={save_interval}',
-                f'tasks.fixedseqs.accept_reject.temperature.step_size={iteration//4}',
-                f'tasks.fixedseqs.accept_reject.energy_cfg.selection=max',
+                f'tasks.fixedseqs.accept_reject.temperature.step_size={iteration}',
                 f'tasks.fixedseqs.num_iter={iteration}'  # DEBUG - use a smaller number of iterations
             ])
 
@@ -62,6 +61,6 @@ def sample(seed, path):
 
 if __name__ == '__main__':
     seed = 2
-    path = f'output/3fingers_ESM5_01_T1_max-mean_expclamp_seed{seed}.fasta'
+    path = f'output/mute_3fingers_SARS_single_T0_001_mean_sigmoid_seed{seed}.fasta'
     print(path)
     sample(seed, path)
