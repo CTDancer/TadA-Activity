@@ -5,6 +5,8 @@ This repository is based on [lm-design](https://github.com/facebookresearch/esm/
 # Installation
 
 ```bash
+conda create -n AIGP_gj python=3.8 -y
+conda activate AIGP_gj
 pip install -r requirements.txt
 ```
 

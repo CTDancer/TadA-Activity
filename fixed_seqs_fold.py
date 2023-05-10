@@ -13,26 +13,32 @@ def count_diff(a, b):
 
 
 def sample(seed, path):
-    seq = "SRLEEELRRRLTESGSETPGTSESATPESSGEVQLQESGGGLVQPGGSLRLSCTASGVTISALNAMAMGWYRQAPGERRVMVAAVSERGNAMYRESVQGRFTVTRDFTNKMVSLQMDNLKPEDTAVYYCHVLEDRVDSFHDYWGQGTQVTVSS"
     TASK = "fixedseqs_fold"
-    iteration = 10000
+    iteration = 20000
     save_interval = 1
+    keep_best = 100
+    pdb_dir = 'output/pdb'
+    print(pdb_dir)
 
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
         cfg = hydra.compose(
-            config_name="config_fold_3fingers", 
+            config_name="config_fold_3fingers",
+            # config_name="config_covid19_3fingers",
             overrides=[
                 f"task={TASK}",
                 f"seed={seed}",
+                "debug=False",
                 "seq_init_random=False",
+                f"tasks.fixedseqs_fold.keep_best={keep_best}",
                 f'tasks.fixedseqs_fold.path={path}',
+                f'tasks.fixedseqs_fold.pdb_dir={pdb_dir}',
                 f'tasks.fixedseqs_fold.save_interval={save_interval}',
                 f'tasks.fixedseqs_fold.num_iter={iteration}'  # DEBUG - use a smaller number of iterations
             ])
 
     # Create a designer from configuration
-    des = Designer(cfg, seq)
+    des = Designer(cfg)
 
     # Run the designer
     start_time = time.time()
@@ -48,7 +54,7 @@ def sample(seed, path):
         f.write(f'>sample_iter{iteration}\n')
         f.write(f'{des.output_seq}\n')
 
-    for i in range(5):
+    for i in range(keep_best):
         best_seq = des.best_seq[i]
         seq = best_seq[2]
         diff = count_diff(seq, des.init_seqs)
@@ -58,7 +64,7 @@ def sample(seed, path):
             f.write(f'{seq}\n')
 
 if __name__ == '__main__':
-    seed = 2
-    path = f'output/3fingers_ESM5_fold_expclamp_seed{seed}.fasta'
+    seed = 0
+    path = f'output/3fingers_ESM3_fold_AG1_expclamp_seed{seed}.fasta'
     print(path)
     sample(seed, path)

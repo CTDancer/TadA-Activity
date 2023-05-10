@@ -13,40 +13,32 @@ cuda_device_idx:  # Set to numberic value to override default GPU device used.
 task: fixedseqs_fold  # fixedbb or free_generation or fixedpos
 free_generation_length: 100
 seq_init_random: False
+antibody: SRLEEELRRRLTESGSETPGTSESATPESSGEVQLQESGGGLVQPGGSLRLSCTASGVTISALNAMAMGWYRQAPGERRVMVARGRGPHPNEYRESVQGRFTVTRDFTNKMVSLQMDNLKPEDTAVYYCHVSRQLPEEWQPKWGQGTQVTVSS
+debug: False
 
 tasks:
-  free_generation:
-      num_iter: 170000
-      resample_y_every: 3
-      resample_y_temp: 1
-      stage_fixedbb_args: ${tasks.fixedbb}
-     
   fixedseqs_fold:
       num_iter: 170000
-
+      keep_best: 100
       # Accept/Reject
       accept_reject:
-          energy_cfg:
-              # struct_w: 3
-              # LM_w: 2
-              # ngram_w: 1
-              # ngram_orders: [1,2,3]
-              struct_w: 0
-              LM_w: 0
-              ngram_w: 0
-              ngram_orders: [1,2,3]
-              dist_w: 0
-              objects: [[[0, 1], [57, 69]], [[0, 1], [83, 92]], [[0, 1], [131, 142]]]
-              selection: min
-              reduction: mean
-              fold_w: 1
-          temperature:
-              scheduler: StepLR
-              step_size: 10000
-              gamma: 0.5
-              initial: 1
-      limit_range: [[57, 69], [83, 92], [131, 142]]
+        energy_cfg:
+          dist_w: 0
+          selection: min
+          reduction: mean
+          fold_w: [1]  # later sum
+          conf_w: [5]  # later sum
+        temperature:
+          scheduler: StepLR
+          step_size: 10000
+          gamma: 0.5
+          initial: 8
+      len_linker: 16
+      limit_range: [[44, 56], [70, 79], [118, 129]]
+      antigen: ['SRLEEELRRRLTE']
+      objects: [[0, 13]]
       path: '.'
+      pdb_dir: '.output/pdb'
       save_interval: 100
       limit_range_random_init: False
 

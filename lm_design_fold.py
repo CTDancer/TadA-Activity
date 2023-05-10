@@ -56,17 +56,11 @@ os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
 
 class Designer:
-    cutoff_dist = 8
-    LOGITS_LARGE = 100
     standard_AA = 'LAGVSERTIDPKQNFYMHWC'
 
-    ##########################################
-    # Inits
-    ##########################################
     def __init__(
         self,
         cfg,
-        seq,
         device=None,
         fp16=False
     ):
@@ -81,7 +75,6 @@ class Designer:
         SEED_SENTINEL = 1238
         self.seed = cfg.seed + SEED_SENTINEL
         self.cfg = cfg
-        self.seq = seq
         self.allowed_AA = ''.join(AA for AA in self.standard_AA if (
                 ('suppress_AA' not in self.cfg) or (not AA in self.cfg.suppress_AA)))
 
@@ -103,32 +96,12 @@ class Designer:
         self.vocab_mask_AA_idx = torch.nonzero(self.vocab_mask_AA).squeeze()
 
         # for esmfold
-        if self.cfg:
+        if not self.cfg.get('debug', False):
             self.struct_model = esm.pretrained.esmfold_v1().to(self.device)
-            return
-            
-        self.struct_model, self.pdb_loader_params = struct_models.load(
-            self.vocab,
-        )
-        if self.fp16:
-            self.struct_model.lm = self.struct_model.lm.half()
-        self.LM = WrapLmEsm(self.struct_model.lm, self.vocab)
-
-        # 4. Common model settings
-        def apply_common_settings(model):
-            model.to(self.device)
-            model.eval()
-            # No grads for models
-            for p in model.parameters():
-                p.requires_grad = False
-            return model
-
-        self.LM = apply_common_settings(self.LM)
-        self.struct_model = apply_common_settings(self.struct_model)
 
     def init_sequences(self, num_seqs):
-        if self.seq is not None:
-            self.x_seqs = self.seq
+        if self.cfg.antibody is not None:
+            self.x_seqs = self.cfg.antibody
             self.init_seqs = self.x_seqs
             return
 
@@ -142,7 +115,7 @@ class Designer:
             self.x_seqs = F.one_hot(bt,K).float() if not self.fp16 else F.one_hot(bt,K).to(torch.float16)
         else:
             self.x_seqs = self.wt_seq
-            self.init_seqs = self.x_seqs.clone()
+            self.init_seqs = self.x_seqs
 
     ##########################################
     # Losses
@@ -193,104 +166,83 @@ class Designer:
         else:
             raise NotImplementedError(f'No such reduction: {reduction}')
 
-    def calc_fold_loss(self, x_seq, objects, selection, reduction, w_conf=1.0):
-        output = self.struct_model.infer(x_seq, num_recycles=1)
+    def calc_fold_loss(self, x_seq, antigen, objects, limit_range, selection, reduction):
+        l_ag = [len(i) for i in antigen]
+
+        output = self.struct_model.infer([ag + x_seq for ag in antigen], num_recycles=1)
+        # for outside usage
+        self.fold_output = output
 
         # average on all atoms of a protein
-        plddt = output["plddt"].mean(dim=2)
-        xyz = atom14_to_atom37(output["positions"][-1], output).mean(dim=2)  # [L, 3]
-
+        idx = output["atom37_atom_exists"]
+        plddt = (output["plddt"] * idx).sum(dim=2) / idx.sum(dim=2)
+        xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
+        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx.sum(dim=2)[..., None].repeat(1,1,3)
+        
         def calc_dist(x1, x2):
-            res = torch.norm(x1 - x2, p=2)
-            return res
+            ans = torch.norm(x1 - x2, p=2)
+            return ans
 
-        dist = []
-        for ob in objects:
-            dist_ob = []
-            for j in range(*ob[1]):
+        res = []
+        for a in range(len(antigen)):
+            dist = []
+            for t in range(len(limit_range)):
                 dist_hand = []
-                for i in range(*ob[0]):
-                    dij = calc_dist(xyz[0, i], xyz[0, j])
-                    dist_hand.append(dij)
-                dist_ob.append(torch.tensor(dist_hand).mean())
-            dist_ob = torch.tensor(dist_ob)
+                for j in range(*limit_range[t]):
+                    dist_ob = []
+                    for i in range(*objects[a]):
+                        dij = calc_dist(xyz[a, i], xyz[a, j + l_ag[a]])
+                        dist_ob.append(dij)
+                    dist_hand.append(torch.tensor(dist_ob).mean())
+                dist_hand = torch.tensor(dist_hand)
+                if selection == 'min':
+                    dist.append(dist_hand.min())
+                elif selection == 'max':
+                    dist.append(dist_hand.max())
+                else:
+                    dist.append(dist_hand.mean())
 
-            if selection == 'min':
-                dist.append(dist_ob.min())
-            elif selection == 'max':
-                dist.append(dist_ob.max())
+            if reduction == 'mean':
+                dist = torch.tensor(dist).mean()
+            elif reduction == 'prod':
+                dist = torch.tensor(dist).prod()
             else:
-                dist.append(dist_ob.mean())
+                raise NotImplementedError(f'No such reduction: {reduction}')
+            res.append(dist)
 
-        # import pdb; pdb.set_trace()
-        if reduction == 'mean':
-            res = torch.tensor(dist).mean()
-        elif reduction == 'prod':
-            res = torch.tensor(dist).prod()
-        else:
-            raise NotImplementedError(f'No such reduction: {reduction}')
-        
-        if w_conf > 0:
-            care_idx = [list(range(*j)) for i in objects for j in i]
-            idx = list(set([j for i in care_idx for j in i]))
-            confidence = plddt[0, idx].mean().to(res)
-            res += w_conf * confidence / 100
-        
-        return res
+        return torch.tensor(res), plddt
 
-    def calc_total_loss(
-        self, 
-        x,
-        LM_w, 
-        struct_w,
-        ngram_w, ngram_orders,
-        dist_w, objects, selection, reduction,
-        fold_w,
-        temp_struct=None):
+    def calc_fold_conf(self, x, plddt, cfg):
+        conf = []
+        l_ag = [len(i) for i in cfg.antigen]
+        for a in range(len(l_ag)):
+            idx = list(range(l_ag[a] + cfg.len_linker, len(x[a]))) + \
+                list(range(*cfg.objects[a]))
+            confidence = plddt[a, idx].mean() / 100
+            conf.append(confidence)
+        return torch.tensor(conf)
+
+    def calc_total_loss(self, x, cfg):
         """
-        Easy one-stop-shop that calls out to all the implemented loss calculators,
-        aggregates logs, and weights total_loss.
-
-        As a refresher:
-            calc_sequence_loss:
-                calculates \sum log p(x_i|x_\i) for i in {set bits in mask}.
-                    If mask is all ones, this is equal to Pseudo-log-likelihood.
-                NOTE: every position in mask is masked *separately*
-                    Therefore, there will be multiple forward passes of the LM.
-            calc_structure_loss:
-                calculates p(y|x)
-            calc_ngram_loss:
-                calculates p_ngram(x)
+            Easy one-stop-shop that calls out to all the implemented loss calculators,
+            aggregates logs, and weights total_loss.
         """
 
         logs = {}
         total_loss = 0
-        if LM_w:
-            lm_m_nlls, _, lm_loss_dict = self.calc_sequence_loss(x, mask=mask)
-            lm_m_nlls *= LM_w / self.L 
-            total_loss += lm_m_nlls
-            logs['lm_loss'] = lm_m_nlls
-            logs.update(lm_loss_dict)
-        if struct_w:
-            struct_m_nlls, struct_loss_dict = self.calc_structure_loss(x, temp_struct=temp_struct)
-            struct_m_nlls *= struct_w
-            total_loss += struct_m_nlls
-            logs['struct_loss'] = struct_m_nlls
-            logs.update(struct_loss_dict)
-        if ngram_w:
-            ngram_m_nlls = self.calc_ngram_loss(x, ngram_orders=ngram_orders)
-            ngram_m_nlls *= ngram_w
-            total_loss += ngram_m_nlls
-            logs['ngram_loss'] = ngram_m_nlls
-        if dist_w:
-            dist_m_nlls = self.calc_dist_loss(x, objects, selection, reduction)
+        e_cfg = cfg.accept_reject.energy_cfg
+        if e_cfg.dist_w:
+            dist_m_nlls = self.calc_dist_loss(x, cfg.objects, e_cfg.selection, e_cfg.reduction)
             dist_m_nlls *= dist_w
             total_loss += dist_m_nlls
             logs['dist_loss'] = dist_m_nlls
-        if fold_w:
-            fold_m_nlls = self.calc_fold_loss(x, objects, selection, reduction)
-            fold_m_nlls *= fold_w
-            total_loss += fold_m_nlls
+        if e_cfg.fold_w:
+            fold_m_nlls, plddt = self.calc_fold_loss(x, cfg.antigen, cfg.objects, cfg.limit_range,
+                e_cfg.selection, e_cfg.reduction)
+            fold_m_nlls = (fold_m_nlls * torch.tensor(e_cfg.fold_w)).sum()
+            fold_conf = self.calc_fold_conf(x, plddt, cfg)
+            fold_conf = (fold_conf * torch.tensor(e_cfg.conf_w)).sum()
+            total_loss += fold_m_nlls + fold_conf
             logs['fold_loss'] = fold_m_nlls
 
         return total_loss, logs  # [B], Dict[str:[B]]

@@ -50,7 +50,6 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
 
     # random init for the given range
     if cfg.limit_range_random_init:
-        
         for c in choices:
             init_i = torch.randint(0, K, (B, ))
             self.x_seqs = substitute(self.x_seqs, c, vocab[init_i[0]])
@@ -66,10 +65,11 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
         ##############################
         # Proposal
         ##############################
-        # Decide which position to mutate == {i}.
-        # mask 1 place
+        # Decide which position to mutate == {i}. Mask 1 place
         idx = torch.randint(0, len(choices), (B,))
         target = torch.randint(0, K, (B,))
+        while x[choices[idx[0]]] == vocab[target[0]]:
+            target = torch.randint(0, K, (B,))
         xp = substitute(x, choices[idx[0]], vocab[target[0]])
 
         ##############################
@@ -78,15 +78,15 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
         # log A(x',x) = log P(x') - log P(x))
         # for current input x, proposal x', target distribution P and symmetric proposal.
         if not self.best_seq:
-            log_P_x = self.calc_total_loss(x, **a_cfg.energy_cfg)[0]  # [B]
+            log_P_x = self.calc_total_loss(x, s_cfg)[0]  # [B]
             self.best_seq.append([-1, log_P_x.item(), x])
             # import pdb; pdb.set_trace()
 
-        log_P_xp = self.calc_total_loss(xp, **a_cfg.energy_cfg)[0]  # [B]
-        if len(self.best_seq) < 5 or log_P_xp < self.best_seq[-1][1]:
+        log_P_xp = self.calc_total_loss(xp, s_cfg)[0]  # [B]
+        if len(self.best_seq) < s_cfg.keep_best or log_P_xp < self.best_seq[-1][1]:
             print(step, log_P_xp.item())
             self.best_seq.append([step, log_P_xp.item(), xp])
-            self.best_seq = sorted(self.best_seq, key=lambda x: x[1])[:5]
+            self.best_seq = sorted(self.best_seq, key=lambda x: x[1])[:s_cfg.keep_best]
         log_A_xp_x = (-log_P_xp - -log_P_x) / a_cfg.temperature  # [B]
         A_xp_x = (log_A_xp_x).exp().clamp(0, 1)  # [B]
         # A_xp_x = log_A_xp_x.sigmoid()  # [B]
@@ -102,7 +102,13 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
             # print(f'Mid output ({step}/{cfg.num_iter}) has changed {diff_point} amino acids.')
             if not os.path.exists(os.path.dirname(cfg.path)):
                 os.makedirs(os.path.dirname(cfg.path))
+            if not os.path.exists(cfg.pdb_dir):
+                os.makedirs(cfg.pdb_dir)
             with open(cfg.path, 'a') as f:
-                f.write(f'>sample_iter{step}\n')
+                f.write(f'>sample_iter{step}_loss{log_P_x.item()}\n')
                 f.write(f'{self.x_seqs}\n')
                 # print(f"Write to {cfg.path}: \n {self.x_seqs}")
+            pdbfile = self.struct_model.output_to_pdb(self.fold_output)
+            for i in range(len(pdbfile)):
+                with open(cfg.pdb_dir+f'/iter_{step}_{i}.pdb', 'w') as f:
+                    f.write(pdbfile[i])
