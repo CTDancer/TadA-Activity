@@ -78,13 +78,14 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
         # log A(x',x) = log P(x') - log P(x))
         # for current input x, proposal x', target distribution P and symmetric proposal.
         if not self.best_seq:
-            log_P_x = self.calc_total_loss(x, s_cfg)[0]  # [B]
+            log_P_x, logs = self.calc_total_loss(x, s_cfg)  # [B]
+            print(-1, log_P_x.item(), logs)
             self.best_seq.append([-1, log_P_x.item(), x])
             # import pdb; pdb.set_trace()
 
-        log_P_xp = self.calc_total_loss(xp, s_cfg)[0]  # [B]
+        log_P_xp, logs = self.calc_total_loss(xp, s_cfg)  # [B]
         if len(self.best_seq) < s_cfg.keep_best or log_P_xp < self.best_seq[-1][1]:
-            print(step, log_P_xp.item())
+            print(step, log_P_xp.item(), logs)
             self.best_seq.append([step, log_P_xp.item(), xp])
             self.best_seq = sorted(self.best_seq, key=lambda x: x[1])[:s_cfg.keep_best]
         log_A_xp_x = (-log_P_xp - -log_P_x) / a_cfg.temperature  # [B]

@@ -14,10 +14,11 @@ def count_diff(a, b):
 
 def sample(seed, path):
     TASK = "fixedseqs_fold"
-    iteration = 20000
+    iteration = 10000
     save_interval = 1
+    conf_w = [10]
     keep_best = 100
-    pdb_dir = 'output/pdb_-5'
+    pdb_dir = 'output/pdb_ESM3_-10_i1'
     print(pdb_dir)
 
     # Load hydra config from config.yaml
@@ -34,6 +35,7 @@ def sample(seed, path):
                 f'tasks.fixedseqs_fold.path={path}',
                 f'tasks.fixedseqs_fold.pdb_dir={pdb_dir}',
                 f'tasks.fixedseqs_fold.save_interval={save_interval}',
+                f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_w={conf_w}',
                 f'tasks.fixedseqs_fold.num_iter={iteration}'  # DEBUG - use a smaller number of iterations
             ])
 
@@ -65,6 +67,6 @@ def sample(seed, path):
 
 if __name__ == '__main__':
     seed = 0
-    path = f'output/3fingers_ESM3_fold_AG1_conf-5_expclamp_seed{seed}.fasta'
+    path = f'output/3fingers_ESM3_fold-i1_AG1_conf-10_expclamp_seed{seed}.fasta'
     print(path)
     sample(seed, path)

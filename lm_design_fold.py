@@ -216,7 +216,8 @@ class Designer:
         conf = []
         l_ag = [len(i) for i in cfg.antigen]
         for a in range(len(l_ag)):
-            idx = list(range(l_ag[a] + cfg.len_linker, len(x[a]))) + \
+            assert plddt.shape[1] == l_ag[a] + len(x)
+            idx = list(range(l_ag[a] + cfg.len_linker, l_ag[a] + len(x))) + \
                 list(range(*cfg.objects[a]))
             confidence = plddt[a, idx].mean() / 100
             conf.append(confidence)
@@ -240,10 +241,13 @@ class Designer:
             fold_m_nlls, plddt = self.calc_fold_loss(x, cfg.antigen, cfg.objects, cfg.limit_range,
                 e_cfg.selection, e_cfg.reduction)
             fold_m_nlls = (fold_m_nlls * torch.tensor(e_cfg.fold_w)).sum()
+            logs['fold_loss'] = fold_m_nlls
             fold_conf = self.calc_fold_conf(x, plddt, cfg)
             fold_conf = (fold_conf * torch.tensor(e_cfg.conf_w)).sum()
+            logs['fold_conf'] = fold_conf
             total_loss += fold_m_nlls + fold_conf
-            logs['fold_loss'] = fold_m_nlls
+        logs['total_loss'] = total_loss
+            
 
         return total_loss, logs  # [B], Dict[str:[B]]
 
