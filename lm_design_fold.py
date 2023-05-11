@@ -166,10 +166,10 @@ class Designer:
         else:
             raise NotImplementedError(f'No such reduction: {reduction}')
 
-    def calc_fold_loss(self, x_seq, antigen, objects, limit_range, selection, reduction):
+    def calc_fold_loss(self, x_seq, antigen, objects, limit_range, selection, reduction, num_recycles):
         l_ag = [len(i) for i in antigen]
 
-        output = self.struct_model.infer([ag + x_seq for ag in antigen], num_recycles=1)
+        output = self.struct_model.infer([ag + x_seq for ag in antigen], num_recycles=num_recycles)
         # for outside usage
         self.fold_output = output
 
@@ -239,7 +239,7 @@ class Designer:
             logs['dist_loss'] = dist_m_nlls
         if e_cfg.fold_w:
             fold_m_nlls, plddt = self.calc_fold_loss(x, cfg.antigen, cfg.objects, cfg.limit_range,
-                e_cfg.selection, e_cfg.reduction)
+                e_cfg.selection, e_cfg.reduction, e_cfg.num_recycles)
             fold_m_nlls = (fold_m_nlls * torch.tensor(e_cfg.fold_w)).sum()
             logs['fold_loss'] = fold_m_nlls
             fold_conf = self.calc_fold_conf(x, plddt, cfg)

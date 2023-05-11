@@ -31,6 +31,7 @@ tasks:
         reduction: mean
         fold_w: [1]  # later sum
         conf_w: [-1]  # later sum
+        num_recycles: 1  # 1,2,3,4
       temperature:
         scheduler: StepLR
         step_size: 1000
