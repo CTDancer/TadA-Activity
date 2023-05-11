@@ -16,12 +16,12 @@ def sample(seed):
     TASK = "fixedseqs_fold"
     iteration = 10000
     save_interval = 1
-    conf_w = [10]
+    conf_w = [-10]
     keep_best = 100
     num_recycles = 1
-    path = f'output/3fingers_ESM3_fold-i{num_recycles}_AG1_conf{conf_w}_seed{seed}.fasta'
+    path = f'output/3fingers_ESM3_fold-i{num_recycles}_AG1_conf{conf_w[0]}_seed{seed}.fasta'
     print(path)
-    pdb_dir = f'output/pdb_ESM3_{conf_w}_i{num_recycles}'
+    pdb_dir = f'output/pdb_ESM3_{conf_w[0]}_i{num_recycles}'
     print(pdb_dir)
 
     # Load hydra config from config.yaml
