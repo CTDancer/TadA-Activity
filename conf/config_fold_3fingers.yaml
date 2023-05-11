@@ -27,7 +27,7 @@ tasks:
           selection: min
           reduction: mean
           fold_w: [1]  # later sum
-          conf_w: [5]  # later sum
+          conf_w: [-5]  # later sum
         temperature:
           scheduler: StepLR
           step_size: 10000

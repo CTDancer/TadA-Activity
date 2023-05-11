@@ -17,7 +17,7 @@ def sample(seed, path):
     iteration = 20000
     save_interval = 1
     keep_best = 100
-    pdb_dir = 'output/pdb'
+    pdb_dir = 'output/pdb_-5'
     print(pdb_dir)
 
     # Load hydra config from config.yaml
@@ -65,6 +65,6 @@ def sample(seed, path):
 
 if __name__ == '__main__':
     seed = 0
-    path = f'output/3fingers_ESM3_fold_AG1_expclamp_seed{seed}.fasta'
+    path = f'output/3fingers_ESM3_fold_AG1_conf-5_expclamp_seed{seed}.fasta'
     print(path)
     sample(seed, path)
