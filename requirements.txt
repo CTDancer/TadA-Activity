@@ -1,4 +1,5 @@
 git+https://github.com/facebookresearch/esm.git
+git+https://github.com/NVIDIA/dllogger.git
 fair-esm[esmfold]
 nltk
 py3Dmol
