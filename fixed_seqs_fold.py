@@ -70,5 +70,5 @@ def sample(seed):
             f.write(f'{seq}\n')
 
 if __name__ == '__main__':
-    seed = 0
+    seed = 1
     sample(seed)
