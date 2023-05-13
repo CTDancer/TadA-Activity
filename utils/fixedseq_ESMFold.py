@@ -79,13 +79,12 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
         # for current input x, proposal x', target distribution P and symmetric proposal.
         if not self.best_seq:
             log_P_x, logs_x = self.calc_total_loss(x, s_cfg)  # [B]
-            print(-1, logs_x)
-            self.best_seq.append([-1, log_P_x.item(), x, logs_x])
+            self.origin_seq = [-1, log_P_x.item(), x, logs_x]
             # import pdb; pdb.set_trace()
 
         log_P_xp, logs_xp = self.calc_total_loss(xp, s_cfg)  # [B]
         if len(self.best_seq) < s_cfg.keep_best or log_P_xp < self.best_seq[-1][1]:
-            print(step, logs_xp)
+            # print(step, logs_xp)
             self.best_seq.append([step, log_P_xp.item(), xp, logs_xp])
             self.best_seq = sorted(self.best_seq, key=lambda x: x[1])[:s_cfg.keep_best]
         log_A_xp_x = (-log_P_xp - -log_P_x) / a_cfg.temperature  # [B]
@@ -98,18 +97,19 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
             log_P_x = log_P_xp.clone()
             logs_x = logs_xp
 
-        # print and save mid outputs
+        # show and save mid outputs
         if step and step % cfg.save_interval == 0:
             diff_point = count_diff(self.x_seqs, init_seqs)
             # print(f'Mid output ({step}/{cfg.num_iter}) has changed {diff_point} amino acids.')
             if not os.path.exists(os.path.dirname(cfg.path)):
                 os.makedirs(os.path.dirname(cfg.path))
-            if not os.path.exists(cfg.pdb_dir):
-                os.makedirs(cfg.pdb_dir)
             with open(cfg.path, 'a') as f:
                 f.write(f'>sample_iter{step}_{logs_x}\n')
                 f.write(f'{self.x_seqs}\n')
-                # print(f"Write to {cfg.path}: \n {self.x_seqs}")
+
+            if not cfg.pdb_dir: continue
+            if not os.path.exists(cfg.pdb_dir):
+                os.makedirs(cfg.pdb_dir)
             pdbfile = self.struct_model.output_to_pdb(self.fold_output)
             for i in range(len(pdbfile)):
                 with open(cfg.pdb_dir+f'/iter_{step}_{i}.pdb', 'w') as f:

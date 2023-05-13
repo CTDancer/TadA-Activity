@@ -1,8 +1,6 @@
-# Imports
 import os
 import time
 import hydra
-import py3Dmol
 from lm_design_fold import Designer
 
 
@@ -14,14 +12,18 @@ def count_diff(a, b):
 
 def sample(seed):
     TASK = "fixedseqs_fold"
-    iteration = 10000
+    iteration = 150
     save_interval = 1
-    conf_w = [-10]
-    keep_best = 100
+    conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
+    conf_w = [-100]
+    keep_best = 10
     num_recycles = 1
-    path = f'output/3fingers_ESM3_fold-i{num_recycles}_AG1_conf{conf_w[0]}_seed{seed}.fasta'
+    temperature = 0.1
+    conf_w_str = 'conf' if not conf_nonlinear else conf_nonlinear
+    path = f'output/ESM3_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
     print(path)
-    pdb_dir = f'output/pdb_ESM3_{conf_w[0]}_i{num_recycles}'
+    # pdb_dir = f'output/pdb_ESM3_fold-i{num_recycles}_I-{iteration}_conf-{conf_w_str}_T{temperature}_seed{seed}'
+    pdb_dir = ''
     print(pdb_dir)
 
     # Load hydra config from config.yaml
@@ -39,7 +41,9 @@ def sample(seed):
                 f'tasks.fixedseqs_fold.pdb_dir={pdb_dir}',
                 f'tasks.fixedseqs_fold.save_interval={save_interval}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_w={conf_w}',
+                f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_nonlinear={conf_nonlinear}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.num_recycles={num_recycles}',
+                f'tasks.fixedseqs_fold.accept_reject.temperature.initial={temperature}',
                 f'tasks.fixedseqs_fold.num_iter={iteration}'  # DEBUG - use a smaller number of iterations
             ])
 

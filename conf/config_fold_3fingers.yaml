@@ -30,13 +30,12 @@ tasks:
         selection: min
         reduction: mean
         fold_w: [1]  # later sum
-        conf_w: [-1]  # later sum
+        conf_w: [-100]  # later sum
         num_recycles: 1  # 1,2,3,4
+        conf_nonlinear:  # 'relu', 'leakyrelu', '2', '3'
       temperature:
-        scheduler: StepLR
-        step_size: 1000
-        gamma: 0.5
-        initial: 8
+        scheduler: ConstantLR
+        initial: 0.1
     len_linker: 16
     limit_range: [[44, 56], [70, 79], [118, 129]]
     antigen: ['SRLEEELRRRLTE']

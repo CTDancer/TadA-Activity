@@ -75,96 +75,21 @@ class Designer:
         SEED_SENTINEL = 1238
         self.seed = cfg.seed + SEED_SENTINEL
         self.cfg = cfg
-        self.allowed_AA = ''.join(AA for AA in self.standard_AA if (
-                ('suppress_AA' not in self.cfg) or (not AA in self.cfg.suppress_AA)))
 
-        self._init_models()
+        # load model
+        if not self.cfg.get('debug', False):
+            self.struct_model = esm.pretrained.esmfold_v1().to(self.device)
 
         set_rng_seeds(self.seed)
         self.schedulers = {}  # reset schedulers
         self.resuming_stage = False
-        self.init_sequences(cfg.num_seqs)
+
+        assert self.cfg.antibody is not None
+        self.x_seqs = self.cfg.antibody
+        self.init_seqs = self.x_seqs
 
         torch.backends.cudnn.benchmark = True  # Slightly faster runtime for optimization
         logger.info("Finished Designer init")
-
-    def _init_models(self):
-        self.vocab = Alphabet.from_architecture('ESM-1b')
-        self.vocab_mask_AA = torch.BoolTensor(
-            [t in self.allowed_AA for t in self.vocab.all_toks]
-        ).to(self.device)
-        self.vocab_mask_AA_idx = torch.nonzero(self.vocab_mask_AA).squeeze()
-
-        # for esmfold
-        if not self.cfg.get('debug', False):
-            self.struct_model = esm.pretrained.esmfold_v1().to(self.device)
-
-    def init_sequences(self, num_seqs):
-        if self.cfg.antibody is not None:
-            self.x_seqs = self.cfg.antibody
-            self.init_seqs = self.x_seqs
-            return
-
-        assert num_seqs == 1, "Only 1 sequence design in parallel supported for now."
-        self.B = B = self.num_seqs = num_seqs
-        
-        if self.cfg.get('seq_init_random', True):
-            K = len(self.vocab)
-            AA_indices = torch.arange(K, device=self.device)[self.vocab_mask_AA]
-            bt = torch.from_numpy(np.random.choice(AA_indices.cpu().numpy(), size=(B, self.L))).to(self.device)
-            self.x_seqs = F.one_hot(bt,K).float() if not self.fp16 else F.one_hot(bt,K).to(torch.float16)
-        else:
-            self.x_seqs = self.wt_seq
-            self.init_seqs = self.x_seqs
-
-    ##########################################
-    # Losses
-    ##########################################
-    
-    def calc_dist_loss(self, x_seq, objects, selection, reduction, 
-        discrete=True, w_conf=1.0):
-        '''
-            objects: [[range1, range2], ...], calculate the minimum atom distance between range1 and range2
-                e.g., [[[0,7], [13,17]], ...]
-        '''
-        B, L, K = x_seq.shape
-        res_preds = self.struct_model(x_seq)
-
-        # bin to class weight (linear since "np.linspace" in pdb_loader)
-        n_bin = res_preds['p_dist'].shape[-1]
-        bin_weight = torch.tensor([i for i in range(n_bin)]).exp().to(res_preds['p_dist'])
-        bound = torch.tensor(n_bin - 1).exp()
-
-        def calc_dist(logits):
-            if discrete:
-                conf, res = logits.max(dim=0)
-                res = res - conf * w_conf
-            else:
-                res = logits.dot(bin_weight) / bound
-            return res
-
-        dist = []
-        for ob in objects:
-            dist_ob = []
-            for j in range(*ob[1]):
-                dist_hand = []
-                for i in range(*ob[0]):
-                    dist_hand.append(calc_dist(res_preds['p_dist'][0, i, j]))
-                dist_ob.append(torch.tensor(dist_hand).mean())
-            dist_ob = torch.tensor(dist_ob)
-            if selection == 'min':
-                dist.append(dist_ob.min())
-            elif selection == 'max':
-                dist.append(dist_ob.max())
-            else:
-                dist.append(dist_ob.mean())
-        # import pdb; pdb.set_trace()
-        if reduction == 'mean':
-            return torch.tensor(dist).mean()
-        elif reduction == 'prod':
-            return torch.tensor(dist).prod()
-        else:
-            raise NotImplementedError(f'No such reduction: {reduction}')
 
     def calc_fold_loss(self, x_seq, antigen, objects, limit_range, selection, reduction, num_recycles):
         l_ag = [len(i) for i in antigen]
@@ -175,13 +100,10 @@ class Designer:
 
         # average on all atoms of a protein
         idx = output["atom37_atom_exists"]
-        plddt = (output["plddt"] * idx).sum(dim=2) / idx.sum(dim=2)
+        idx_sum = idx.sum(dim=2)
+        plddt = (output["plddt"] * idx).sum(dim=2) / idx_sum
         xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
-        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx.sum(dim=2)[..., None].repeat(1,1,3)
-        
-        def calc_dist(x1, x2):
-            ans = torch.norm(x1 - x2, p=2)
-            return ans
+        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
 
         res = []
         for a in range(len(antigen)):
@@ -189,10 +111,10 @@ class Designer:
             for t in range(len(limit_range)):
                 dist_hand = []
                 for j in range(*limit_range[t]):
-                    dist_ob = []
-                    for i in range(*objects[a]):
-                        dij = calc_dist(xyz[a, i], xyz[a, j + l_ag[a]])
-                        dist_ob.append(dij)
+                    dist_ob = [
+                        torch.norm(xyz[a, i] - xyz[a, j + l_ag[a]], p = 2)
+                        for i in range(*objects[a])
+                    ]
                     dist_hand.append(torch.tensor(dist_ob).mean())
                 dist_hand = torch.tensor(dist_hand)
                 if selection == 'min':
@@ -243,11 +165,19 @@ class Designer:
             fold_m_nlls = (fold_m_nlls * torch.tensor(e_cfg.fold_w)).sum()
             logs['fold_loss'] = fold_m_nlls.item()
             fold_conf = self.calc_fold_conf(x, plddt, cfg)
-            fold_conf = (fold_conf * torch.tensor(e_cfg.conf_w)).sum()
             logs['fold_conf'] = fold_conf.item()
-            total_loss += fold_m_nlls + fold_conf
+            if e_cfg.conf_nonlinear == 'relu':
+                fold_conf[fold_conf < 0.85] = 0
+            elif e_cfg.conf_nonlinear == 'leakyrelu':
+                fold_conf[fold_conf < 0.85] = fold_conf[fold_conf < 0.85] / 2
+            elif e_cfg.conf_nonlinear in [2, '2']:
+                fold_conf = fold_conf.pow(2)
+            elif e_cfg.conf_nonlinear in [3, '3']:
+                fold_conf = fold_conf.pow(3)
+            fold_conf_loss = (fold_conf * torch.tensor(e_cfg.conf_w)).sum()
+            logs['fold_conf_loss'] = fold_conf_loss.item()
+            total_loss += fold_m_nlls + fold_conf_loss
         logs['total_loss'] = total_loss.item()
-            
 
         return total_loss, logs  # [B], Dict[str:[B]]
 
@@ -310,6 +240,7 @@ class Designer:
                 if is_sspec(maybe_sspec):
                     assert not name in self.schedulers, f"Trying to re-register {name}"
                     self.schedulers[name] = to_scheduler(maybe_sspec)
+        self.is_scheduler_registered = True
     
     def gen_step_cfg(self, cfg):
         """
@@ -325,7 +256,8 @@ class Designer:
         return step_cfg
 
     def stepper(self, iterable, update_schedulers=True, cfg=None):
-        self.init_schedulers_from_cfg(cfg)
+        if not hasattr(self, 'is_scheduler_registered'):
+            self.init_schedulers_from_cfg(cfg)
         
         for local_step in iterable:
             yield local_step, self.gen_step_cfg(cfg)
