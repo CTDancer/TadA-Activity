@@ -1,17 +1,21 @@
 import pandas as pd
 import numpy as np
 import esm
+import torch
+from tqdm import tqdm
+from sklearn.cluster import KMeans
 
 
-def load_table(path):
+def load_table(path, mask=False):
     tb = pd.read_csv(path, sep='\t')
     bodies = []
     for i in range(len(tb)):
         ab = list(tb.iloc[i, 0])
-        for j in range(1, 4):
-            s = tb.iloc[i, 0].index(tb.iloc[i, j])
-            l = len(tb.iloc[i, j])
-            ab[s : s + l] = ['<mask>'] * l
+        if mask:
+            for j in range(1, 4):
+                s = tb.iloc[i, 0].index(tb.iloc[i, j])
+                l = len(tb.iloc[i, j])
+                ab[s : s + l] = ['<mask>'] * l
         bodies += [''.join(ab)]
     return bodies
 
@@ -23,11 +27,13 @@ def extract_feature(data):
     model.eval()
 
     res = {}
-    bs = 4
-    start, end = 0, 10
-    data = data[start: end]
-    for i in range(0, len(data), bs):
-        datax = [(j, data[j]) data[i : i + bs]]
+    start, end = 0, 18000
+    end = min(end, len(data))
+    print(f'[LOG] Aiming at ({start}-{end})/{len(data)}.')
+    npz_path = f'output/cluster/dict_repr_{start}_{end}_mask.npy'
+    print(npz_path)
+    for i in tqdm(range(start, end)):
+        datax = [(i, data[i])]
         batch_labels, batch_strs, batch_tokens = batch_converter(datax)
         batch_lens = (batch_tokens != alphabet.padding_idx).sum(1)
         
@@ -40,21 +46,29 @@ def extract_feature(data):
         # NOTE: token 0 is always a beginning-of-sequence token, so the first residue is token 1.
         for i, tokens_len in enumerate(batch_lens):
             res[batch_labels[i]] = token_representations[i, 1 : tokens_len - 1].mean(0)
-            import pdb; pdb.set_trace()
     tag = f"{start}-{end}"
-    np.save(f'output_17k/dict_repr.npy', res)
+    np.save(npz_path, res)
     print(f"Schedule:{start}-{end}")
     return res
 
 
 def cluster(path):
-    antibody = load_table(path)
-    feature = extract_feature(antibody)
+    antibody = load_table(path, mask=False)
+    dist = np.load('output/cluster/dict_repr_0_17129.npy', allow_pickle=True).item()
+    
+    X = np.array(list(dist.values()))
+    kmeans = KMeans(n_clusters=10, random_state=0).fit(X)
     import pdb; pdb.set_trace()
+    from collections import Counter
+    label = Counter(kmeans.labels_)
+    # for i in 
+    # antibody[]
 
 
 
 
 if __name__ == '__main__':
     path = 'data/patent_sequence.tsv'
+    # antibody = load_table(path, mask=True)
+    # feature = extract_feature(antibody)
     cluster(path)
