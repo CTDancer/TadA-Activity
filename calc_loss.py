@@ -32,6 +32,7 @@ def calc_loss_tsv(table_path, start, end):
             ])
 
     seqs = load_table(table_path)
+    end = min(len(seqs), end)
     print(f'[LOG] Aiming at ({start}-{end})/{len(seqs)}.')
     # Create a designer from configuration
     des = Designer(cfg)
@@ -79,6 +80,6 @@ if __name__ == '__main__':
     # seq = 'SGSETPGTSESATPESSGEVQLQESGGGLVQPGGSLRLSCTASGVTISALNAMAMGWYRQAPGERRVMVAAVSERGNAMYRESVQGRFTVTRDFTNKMVSLQMDNLKPEDTAVYYCHVLEDRVDSFHDYWGQGTQVTVSS'
     # calc_loss(seq)
     start = 16000
-    end = 18000
+    end = 16600
     path = 'data/patent_sequence.tsv'
     calc_loss_tsv(path, start, end)
