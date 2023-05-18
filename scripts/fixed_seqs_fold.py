@@ -12,26 +12,25 @@ def count_diff(a, b):
 
 def sample(seed):
     TASK = "fixedseqs_fold"
-    iteration = 10000
-    save_interval = 1
+    iteration = 1000
+    save_interval = [1, 'best'][1]
     conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
-    conf_w = [-100]
-    keep_best = 10
+    conf_w = [-10]
+    keep_best = 1
     num_recycles = 4
     temperature = 0.01
-    focus_on_antigen = True
+    focus_on_antigen = False
     conf_w_str = 'conf' if not conf_nonlinear else conf_nonlinear
-    path = f'output/ESM5_covid-focus_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
+    path = f'output/ESM3_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
     print(path)
-    # pdb_dir = f'output/pdb_ESM3_fold-i{num_recycles}_I-{iteration}_conf-{conf_w_str}_T{temperature}_seed{seed}'
-    pdb_dir = ''
+    pdb_dir = f'output/pdb_ESM3_fold-i{num_recycles}_I-{iteration}_conf-{conf_w_str}_T{temperature}_seed{seed}'
+    # pdb_dir = ''
     print(pdb_dir)
 
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
         cfg = hydra.compose(
-            # config_name="config_fold_3fingers",
-            config_name="config_covid19_3fingers",
+            config_name="config_fold_3fingers",
             overrides=[
                 f"task={TASK}",
                 f"seed={seed}",

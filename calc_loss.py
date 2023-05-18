@@ -24,11 +24,13 @@ def calc_loss_tsv(table_path, start, end):
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
         cfg = hydra.compose(
-            config_name="config_fold_3fingers",
+            # config_name="config_fold_3fingers",
+            config_name="config_covid19_3fingers",
             overrides=[
                 f"task={TASK}",
                 "debug=False",
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.num_recycles={num_recycles}',
+                f'+tasks.fixedseqs_fold.focus_on_antigen={True}',
             ])
 
     seqs = load_table(table_path)
@@ -48,7 +50,8 @@ def calc_loss_tsv(table_path, start, end):
         data['pLDDT'].append(log['fold_conf'])
         data['loss'].append(log['total_loss'])
 
-    path_tsv = f'output_17k/Loss_{start}_{end}_fold-i4.tsv'
+    # path_tsv = f'output_17k/Loss_{start}_{end}_fold-i4.tsv'
+    path_tsv = f'output/covid/Loss_{start}_{end}_fold-i4.tsv'
     print('[LOG] Saving', path_tsv)
 
     df = pd.DataFrame(data)
@@ -79,7 +82,7 @@ def calc_loss(seq):
 if __name__ == '__main__':
     # seq = 'SGSETPGTSESATPESSGEVQLQESGGGLVQPGGSLRLSCTASGVTISALNAMAMGWYRQAPGERRVMVAAVSERGNAMYRESVQGRFTVTRDFTNKMVSLQMDNLKPEDTAVYYCHVLEDRVDSFHDYWGQGTQVTVSS'
     # calc_loss(seq)
-    start = 16000
-    end = 16600
+    start = 8600
+    end = 17200
     path = 'data/patent_sequence.tsv'
     calc_loss_tsv(path, start, end)

@@ -61,6 +61,7 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
     for step, s_cfg in itr:
         x = self.x_seqs
         a_cfg = s_cfg.accept_reject
+        updated = False
 
         ##############################
         # Proposal
@@ -87,6 +88,7 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
             # print(step, logs_xp)
             self.best_seq.append([step, log_P_xp.item(), xp, logs_xp])
             self.best_seq = sorted(self.best_seq, key=lambda x: x[1])[:s_cfg.keep_best]
+            updated = True
         log_A_xp_x = (-log_P_xp - -log_P_x) / a_cfg.temperature  # [B]
         A_xp_x = (log_A_xp_x).exp().clamp(0, 1)  # [B]
         # A_xp_x = log_A_xp_x.sigmoid()  # [B]
@@ -98,7 +100,12 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
             logs_x = logs_xp
 
         # show and save mid outputs
-        if step and step % cfg.save_interval == 0:
+        if cfg.save_interval == 'best':
+            flag_save = updated
+        else:
+            flag_save = (step and (step % cfg.save_interval == 0))
+
+        if flag_save:
             diff_point = count_diff(self.x_seqs, init_seqs)
             # print(f'Mid output ({step}/{cfg.num_iter}) has changed {diff_point} amino acids.')
             if not os.path.exists(os.path.dirname(cfg.path)):

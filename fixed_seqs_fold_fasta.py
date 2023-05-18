@@ -25,7 +25,7 @@ def load_table(path):
 
 def sample(start, end, seed):
     TASK = "fixedseqs_fold"
-    iteration = 150
+    iteration = 1000
     save_interval = 1
     conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
     conf_w = [-100]
@@ -60,6 +60,7 @@ def sample(start, end, seed):
             ])
 
     seqs = load_table(table_path)
+    end = min(end, len(seqs))
     print(f'[LOG] Aiming at ({start}-{end})/{len(seqs)}.')
     # Create a designer from configuration
     des = Designer(cfg)
@@ -68,7 +69,7 @@ def sample(start, end, seed):
         des.x_seqs = antibody
         des.init_seqs = des.x_seqs
         des.cfg.tasks[des.cfg.task].limit_range = limit_range
-        path = f'output/17k/{s}_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
+        path = f'output_17k/best_loss_init/{s}_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
         des.cfg.tasks[des.cfg.task].path = path
         print('[LOG]', path)
 
@@ -96,6 +97,9 @@ def sample(start, end, seed):
 
 if __name__ == '__main__':
     seed = 1
-    start = 8000
-    end = 9000
+    # lists = [15542, 10608, 11667, 6415, 17039, 11487, 13097, 8343, 66, 6389]
+    # start = lists[9]
+    # end = start + 1
+    start = 0
+    end = 17200
     sample(start, end, seed)

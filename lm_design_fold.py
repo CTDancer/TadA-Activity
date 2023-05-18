@@ -18,6 +18,7 @@ import sys
 import time
 import logging
 
+from scipy.spatial import ConvexHull
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import torch
@@ -105,32 +106,8 @@ class Designer:
         xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
         xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
 
-        res = []
-        for a in range(len(antigen)):
-            dist = []
-            for t in range(len(limit_range)):
-                dist_hand = []
-                for j in range(*limit_range[t]):
-                    dist_ob = [
-                        torch.norm(xyz[a, i] - xyz[a, j + l_ag[a]], p = 2)
-                        for i in range(*objects[a])
-                    ]
-                    dist_hand.append(torch.tensor(dist_ob).mean())
-                dist_hand = torch.tensor(dist_hand)
-                if selection == 'min':
-                    dist.append(dist_hand.min())
-                elif selection == 'max':
-                    dist.append(dist_hand.max())
-                else:
-                    dist.append(dist_hand.mean())
-
-            if reduction == 'mean':
-                dist = torch.tensor(dist).mean()
-            elif reduction == 'prod':
-                dist = torch.tensor(dist).prod()
-            else:
-                raise NotImplementedError(f'No such reduction: {reduction}')
-            res.append(dist)
+        res = self.calc_distance(xyz, antigen, limit_range, 
+            selection=selection, reduction=reduction)
 
         return torch.tensor(res), plddt
 
@@ -139,9 +116,13 @@ class Designer:
         l_ag = [len(i) for i in cfg.antigen]
         for a in range(len(l_ag)):
             assert plddt.shape[1] == l_ag[a] + len(x)
-            idx = list(range(l_ag[a] + cfg.len_linker, l_ag[a] + len(x))) + \
-                list(range(*cfg.objects[a]))
-            confidence = plddt[a, idx].mean() / 100
+            if cfg.get('focus_on_antigen', False):
+                idx = list(range(*cfg.objects[a]))
+                confidence = plddt[a, idx].max() / 100
+            else:
+                idx = list(range(l_ag[a] + cfg.len_linker, l_ag[a] + len(x))) + \
+                    list(range(*cfg.objects[a]))
+                confidence = plddt[a, idx].mean() / 100
             conf.append(confidence)
         return torch.tensor(conf)
 
@@ -181,6 +162,71 @@ class Designer:
 
         return total_loss, logs  # [B], Dict[str:[B]]
 
+    def calc_distance(self, xyz, antigen, limit_range, selection='min', reduction='mean'):
+        if isinstance(antigen, str):
+            antigen = [antigen]
+        l_ag = [len(i) for i in antigen]
+        res = []
+        for a in range(xyz.shape[0]):
+            dist = []
+            for t in range(len(limit_range)):
+                dist_hand = []
+                for j in range(*limit_range[t]):
+                    dist_ob = [
+                        torch.norm(xyz[a, i] - xyz[a, j + l_ag[a]], p = 2)
+                        for i in range(*objects[a])
+                    ]
+                    dist_hand.append(torch.tensor(dist_ob).mean())
+                dist_hand = torch.tensor(dist_hand)
+                if selection == 'min':
+                    dist.append(dist_hand.min())
+                elif selection == 'max':
+                    dist.append(dist_hand.max())
+                else:
+                    dist.append(dist_hand.mean())
+
+            if reduction == 'mean':
+                dist = torch.tensor(dist).mean()
+            elif reduction == 'prod':
+                dist = torch.tensor(dist).prod()
+            else:
+                raise NotImplementedError(f'No such reduction: {reduction}')
+            res.append(dist)
+        return res
+
+    def find_interest(self, 
+        antigen, 
+        antibody, 
+        len_insterest, 
+        limit_range, 
+        num_cycles=4, 
+        mode='brute'
+    ):
+        if isinstance(len_insterest, int):
+            len_insterest = [len_insterest]
+
+        output = self.struct_model.infer([antigen + antibody], num_recycles=num_recycles)
+        # average on all atoms of a protein
+        idx = output["atom37_atom_exists"]
+        idx_sum = idx.sum(dim=2)
+        plddt = (output["plddt"] * idx).sum(dim=2) / idx_sum
+        xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
+        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
+
+        losses = []
+        if mode == 'brute':
+            for l in len_insterest:
+                for i in range(len(antigen) - l):
+                    losses.append([
+                        calc_distance(xyz, antigen, limit_range), i, i+l])
+        elif mode == 'convexhull':
+            hull = ConvexHull(xyz[0])
+            for l in len_insterest:
+                for i in range(len(antigen) - l):
+                    losses.append([
+                        calc_distance(xyz, antigen, limit_range), i, i+l])
+        losses = sorted(losses, key=lambda x: x[0])
+        return losses
 
     ##########################################
     # YAML Execution
