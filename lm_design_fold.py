@@ -106,7 +106,7 @@ class Designer:
         xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
         xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
 
-        res = self.calc_distance(xyz, antigen, limit_range, 
+        res = self.calc_distance(xyz, antigen, limit_range, objects,
             selection=selection, reduction=reduction)
 
         return torch.tensor(res), plddt
@@ -162,7 +162,7 @@ class Designer:
 
         return total_loss, logs  # [B], Dict[str:[B]]
 
-    def calc_distance(self, xyz, antigen, limit_range, selection='min', reduction='mean'):
+    def calc_distance(self, xyz, antigen, limit_range, objects, selection='min', reduction='mean'):
         if isinstance(antigen, str):
             antigen = [antigen]
         l_ag = [len(i) for i in antigen]
@@ -199,12 +199,13 @@ class Designer:
         antibody, 
         len_insterest, 
         limit_range, 
-        num_cycles=4, 
+        num_recycles=4, 
         mode='brute'
     ):
         if isinstance(len_insterest, int):
             len_insterest = [len_insterest]
 
+        self.struct_model.set_chunk_size(128)
         output = self.struct_model.infer([antigen + antibody], num_recycles=num_recycles)
         # average on all atoms of a protein
         idx = output["atom37_atom_exists"]
@@ -218,13 +219,16 @@ class Designer:
             for l in len_insterest:
                 for i in range(len(antigen) - l):
                     losses.append([
-                        calc_distance(xyz, antigen, limit_range), i, i+l])
+                        self.calc_distance(xyz, antigen, limit_range, [[i, i+l]]), i, i+l])
         elif mode == 'convexhull':
-            hull = ConvexHull(xyz[0])
+            hull = ConvexHull(xyz[0].cpu().numpy())
             for l in len_insterest:
                 for i in range(len(antigen) - l):
+                    if sum([i in hull.vertices for i in range(i,i+l)]) == 0:
+                        continue
                     losses.append([
-                        calc_distance(xyz, antigen, limit_range), i, i+l])
+                        self.calc_distance(xyz, antigen, limit_range, [[i, i+l]]), i, i+l])
+        
         losses = sorted(losses, key=lambda x: x[0])
         return losses
 

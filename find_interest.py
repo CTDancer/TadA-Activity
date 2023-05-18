@@ -21,12 +21,13 @@ def find_interest(antibody, antigen, limit_range, len_insterest, mode='brute'):
 
     # Create a designer from configuration
     des = Designer(cfg)
+    # import pdb; pdb.set_trace()
     losses = des.find_interest(antigen, antibody, len_insterest, limit_range, 4, mode)
     import pdb; pdb.set_trace()
     print(losses)
 
 if __name__ == '__main__':
-    antigen = 'WRQTWSGPGTTKRFPETVLARCVKYTEIHPEMRHVDCQSVWDAFKGAFISKHPCDITEEDYQPLMKLGTQTVPCNKILLWSRIKDLAHQFTQVQRDMFTLEDTLLGYLADDLTWCGEFDTSKINYQSCPDWRKDCSNNPVSVFWKTVSRRFAEAACDVVHVMLDGSRSKIFDKDSTFGSVEVHNLQPEKVQTLEAWVIHGGREDSRDLCQDPTIKELESIISKRNIQFSCKNIYRPDKFLQCVKNPEDSSCTSEI'
+    antigen = 'WRQTWSGPGPDRKAAVSHWQQVQRDMFTLEDTLLGYLADDLTW'  # PDRKAAVSHWQ
     antibody = 'SGSETPGTSESATPESQVQLVESGGGLVQPGGSLTLSCTASGFTLDHYDIGWFRQAPGKEREGVSCINNSDDDTYYADSVKGRFTIFMNNAKDTVYLQMNSLKPEDTAIYYCAEARGCKRGRYEYDFWGQGTQVTVSS'
     limit_range = [[42, 51], [65, 75], [112, 127]]
-    find_interest(antibody, antigen, limit_range, 10)
+    find_interest(antibody, antigen, limit_range, 10, mode='convexhull')
