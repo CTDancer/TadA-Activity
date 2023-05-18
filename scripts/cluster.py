@@ -53,14 +53,18 @@ def extract_feature(data):
 
 
 def cluster(path):
-    antibody = load_table(path, mask=False)
+    # antibody = load_table(path, mask=False)
     dist = np.load('output/cluster/dict_repr_0_17129.npy', allow_pickle=True).item()
-    
-    X = np.array(list(dist.values()))
+    dist_item = sorted(dist.items(), key=lambda x: x[0])
+    X = np.array([i[1] for i in dist_item])
     kmeans = KMeans(n_clusters=10, random_state=0).fit(X)
-    import pdb; pdb.set_trace()
+    # df = pd.DataFrame(dict(kmeans_10_mask=kmeans.labels_))
+    # df.to_csv('output_17k/kmeans_10_mask.tsv', sep="\t", index=False)
+
+    # import pdb; pdb.set_trace()
     from collections import Counter
     label = Counter(kmeans.labels_)
+    print(label)
     # for i in 
     # antibody[]
 
