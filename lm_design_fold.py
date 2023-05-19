@@ -92,24 +92,22 @@ class Designer:
         torch.backends.cudnn.benchmark = True  # Slightly faster runtime for optimization
         logger.info("Finished Designer init")
 
+
     def calc_fold_loss(self, x_seq, antigen, objects, limit_range, selection, reduction, num_recycles):
         l_ag = [len(i) for i in antigen]
 
         output = self.struct_model.infer([ag + x_seq for ag in antigen], num_recycles=num_recycles)
+        xyz, plddt = self.get_xyz(output)
+
         # for outside usage
         self.fold_output = output
-
-        # average on all atoms of a protein
-        idx = output["atom37_atom_exists"]
-        idx_sum = idx.sum(dim=2)
-        plddt = (output["plddt"] * idx).sum(dim=2) / idx_sum
-        xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
-        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
-
+        self.xyz = xyz
+        
         res = self.calc_distance(xyz, antigen, limit_range, objects,
             selection=selection, reduction=reduction)
 
         return torch.tensor(res), plddt
+
 
     def calc_fold_conf(self, x, plddt, cfg):
         conf = []
@@ -125,6 +123,13 @@ class Designer:
                 confidence = plddt[a, idx].mean() / 100
             conf.append(confidence)
         return torch.tensor(conf)
+
+
+    def calc_struct_sim(self, p1, p2):
+        from utils.icp import icp
+        T, distances, iterations = icp(p2, p1, tolerance=1E-9)
+        return np.linalg.norm(distances)
+
 
     def calc_total_loss(self, x, cfg):
         """
@@ -162,6 +167,7 @@ class Designer:
 
         return total_loss, logs  # [B], Dict[str:[B]]
 
+
     def calc_distance(self, xyz, antigen, limit_range, objects, selection='min', reduction='mean'):
         if isinstance(antigen, str):
             antigen = [antigen]
@@ -194,6 +200,17 @@ class Designer:
             res.append(dist)
         return res
 
+
+    def get_xyz(self, output):
+        # average on all atoms of a protein
+        idx = output["atom37_atom_exists"]
+        idx_sum = idx.sum(dim=2)
+        plddt = (output["plddt"] * idx).sum(dim=2) / idx_sum
+        xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
+        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
+        return xyz, plddt
+
+
     def find_interest(self, 
         antigen, 
         antibody, 
@@ -205,14 +222,8 @@ class Designer:
         if isinstance(len_insterest, int):
             len_insterest = [len_insterest]
 
-        self.struct_model.set_chunk_size(128)
         output = self.struct_model.infer([antigen + antibody], num_recycles=num_recycles)
-        # average on all atoms of a protein
-        idx = output["atom37_atom_exists"]
-        idx_sum = idx.sum(dim=2)
-        plddt = (output["plddt"] * idx).sum(dim=2) / idx_sum
-        xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
-        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
+        xyz, plddt = self.get_xyz(output)
 
         losses = []
         if mode == 'brute':
