@@ -1,5 +1,6 @@
 import os
 import hydra
+from tqdm import tqdm
 from lm_design_fold import Designer
 
 import numpy as np
@@ -14,7 +15,7 @@ def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute')
         
     TASK = "fixedseqs_fold"
     num_recycles = 4
-    conf_w = [-10]
+    conf_w = [0]
     struct_w = [1]
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
@@ -30,6 +31,13 @@ def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute')
     # Create a designer from configuration
     des = Designer(cfg)
 
+    # Calculate the antigen's structure
+    des.struct_model.set_chunk_size(128)
+    output = des.struct_model.infer([antigen], num_recycles=num_recycles)
+    xyz_antigen, plddt = des.get_xyz(output)
+    print(f'[LOG]  Obtain antigen\'s structure.')
+    xyz_antigen = xyz_antigen[0].cpu().numpy()
+
     # Find candidates on the antigen
     candidates = []
     if mode == 'brute':
@@ -37,12 +45,7 @@ def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute')
             for i in range(len(antigen) - l):
                 candidates.append([i, l])
     elif mode == 'convexhull':
-        # Calculate the antigen's structure
-        des.struct_model.set_chunk_size(128)
-        output = des.struct_model.infer([antigen], num_recycles=num_recycles)
-        xyz_antigen, plddt = des.get_xyz(output)
-        print(f'[LOG]  Obtain antigen\'s structure.')
-        hull = ConvexHull(xyz_antigen[0].cpu().numpy())
+        hull = ConvexHull(xyz_antigen)
         pos_dict = {i:i in hull.vertices for i in range(len(antigen))}
         for l in len_insterest:
             for i in range(len(antigen) - l):
@@ -53,16 +56,18 @@ def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute')
     # import pdb; pdb.set_trace()
     # calculate loss for each candidate
     losses = []
-    for i, l in candidates:
+    for i, l in tqdm(candidates):
         des.cfg.tasks[cfg.task].antigen = [antigen[i:i+l]]
         des.cfg.tasks[cfg.task].limit_range = [[0, l]]
         loss, logs = des.calc_total_loss(antibody, cfg.tasks[cfg.task])
         
         # for structural similarity
-        struct_loss = des.calc_struct_sim(xyz_antigen[0, i:i+l].cpu().numpy(), 
-            des.xyz[0, 0:l].cpu().numpy()) * struct_w[0]
+        fitness, rmse = des.calc_struct_sim(xyz_antigen[i:i+l], 
+            des.xyz[0, 0:l].cpu().numpy(), cuda=False)
+        struct_loss = rmse * struct_w[0]
         loss += struct_loss
         logs['struct_loss'] = struct_loss
+        logs['struct_fitness'] = fitness
 
         losses.append([loss, logs, i, i+l])
 
@@ -70,7 +75,7 @@ def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute')
     losses = sorted(losses, key=lambda x: x[0])
     print(losses)
     np.save(f'output/interest/losses_conf{conf_w[0]}_struct{struct_w[0]}.npy', losses)
-    print(antigen[*losses[0][2:]])
+    print(antigen[losses[0][2]:losses[0][3]])
 
 
 def find_interest(antibody, antigen, limit_range, len_insterest, mode='brute'):
@@ -95,9 +100,10 @@ def find_interest(antibody, antigen, limit_range, len_insterest, mode='brute'):
     np.save
     print(losses)
 
+
 if __name__ == '__main__':
     antigen = 'WRQTWSGPGPDRKAAVSHWQQVQRDMFTLEDTLLGYLADDLTW'  # PDRKAAVSHWQ
     antibody = 'SGSETPGTSESATPESQVQLVESGGGLVQPGGSLTLSCTASGFTLDHYDIGWFRQAPGKEREGVSCINNSDDDTYYADSVKGRFTIFMNNAKDTVYLQMNSLKPEDTAIYYCAEARGCKRGRYEYDFWGQGTQVTVSS'
     limit_range = [[42, 51], [65, 75], [112, 127]]
     # find_interest(antibody, antigen, limit_range, 10, mode='convexhull')
-    search_interest(antibody, antigen, limit_range, 10, mode='convexhull')
+    search_interest(antibody, antigen, limit_range, 11, mode='brute')
