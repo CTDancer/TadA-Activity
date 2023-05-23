@@ -25,13 +25,13 @@ def load_table(path):
 
 def sample(start, end, seed):
     TASK = "fixedseqs_fold"
-    iteration = 1000
+    iteration = 10000
     save_interval = 1
     conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
     conf_w = [-100]
     keep_best = 10
-    num_recycles = 1
-    temperature = 0.1
+    num_recycles = 4
+    temperature = 0.01
     conf_w_str = 'conf' if not conf_nonlinear else conf_nonlinear
     path = f'output/17k/fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
     print(path)
@@ -42,7 +42,8 @@ def sample(start, end, seed):
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
         cfg = hydra.compose(
-            config_name="config_fold_3fingers",
+            # config_name="config_fold_3fingers",
+            config_name="config_covid19_3fingers",
             overrides=[
                 f"task={TASK}",
                 f"seed={seed}",
@@ -69,7 +70,7 @@ def sample(start, end, seed):
         des.x_seqs = antibody
         des.init_seqs = des.x_seqs
         des.cfg.tasks[des.cfg.task].limit_range = limit_range
-        path = f'output_17k/best_loss_init/{s}_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
+        path = f'output_17k/best_loss_init_covid/{s}_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
         des.cfg.tasks[des.cfg.task].path = path
         print('[LOG]', path)
 
@@ -98,8 +99,9 @@ def sample(start, end, seed):
 if __name__ == '__main__':
     seed = 1
     # lists = [15542, 10608, 11667, 6415, 17039, 11487, 13097, 8343, 66, 6389]
-    # start = lists[9]
-    # end = start + 1
-    start = 0
-    end = 17200
+    lists = [9671, 8805]
+    start = lists[1]
+    end = start + 1
+    # start = 0
+    # end = 17200
     sample(start, end, seed)
