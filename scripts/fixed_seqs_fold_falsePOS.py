@@ -16,7 +16,7 @@ def sample(seed):
     save_interval = 1
     conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
     conf_w = [-100]
-    falsePOS_w = [-10]
+    falsePOS_w = [-100]
     keep_best = 10
     num_recycles = 4
     temperature = 0.01
@@ -73,7 +73,7 @@ def sample(seed):
         diff = count_diff(seq, des.init_seqs)
         print(f"Best seq (loss={best_seq[1]}) has changed {diff} amino acids, in step {best_seq[0]}. \n {seq}")
         with open(path, 'a') as f:
-            f.write(f'>best_iter{best_seq[0]}_loss{round(best_seq[1], 2)}\n')
+            f.write(f'>best_iter{best_seq[0]}_loss{round(best_seq[1], 2)}_{best_seq[3]}\n')
             f.write(f'{seq}\n')
 
 if __name__ == '__main__':
