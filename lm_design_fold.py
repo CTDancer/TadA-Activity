@@ -171,9 +171,11 @@ class Designer:
         losses = sorted(losses, key=lambda x: x[0])
         return losses
 
+
     ##########################################
     # YAML Execution
     ##########################################
+
 
     def run_from_cfg(self):
         """
@@ -188,7 +190,8 @@ class Designer:
             raise ValueError(f'Invalid task: {self.cfg.task}')
 
         self.output_seq = self.x_seqs
-            
+
+
     def init_schedulers_from_cfg(self, cfg: DictConfig):
         """
         Similar to init_schedulers, but expects a stage-specific DictConfig.
@@ -226,7 +229,8 @@ class Designer:
                     assert not name in self.schedulers, f"Trying to re-register {name}"
                     self.schedulers[name] = to_scheduler(maybe_sspec)
         self.is_scheduler_registered = True
-    
+
+
     def gen_step_cfg(self, cfg):
         """
         Replace schedulers in a cfg with step-specific values.
@@ -239,6 +243,7 @@ class Designer:
             if OmegaConf.select(step_cfg, name) is not None:
                 OmegaConf.update(step_cfg, name, sched(), merge=False)
         return step_cfg
+
 
     def stepper(self, iterable, update_schedulers=True, cfg=None):
         if not hasattr(self, 'is_scheduler_registered'):

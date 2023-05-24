@@ -31,22 +31,28 @@ def substitute(s: str, i: int, target: str):
 def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
     """Metropolis-Hastings sampling with uniform proposal and energy-based acceptance."""
     B = 1
-    L = len(self.x_seqs)
     vocab = residue_constants.restypes
     K = len(vocab)
+    inv = cfg.get('inv', False)
+    L = len(cfg.antigen[0]) if inv else len(self.x_seqs)
 
     # restricted regions to mutate
-    choices = []
-    for i in cfg.limit_range:
-        for j in range(i[0], i[1]):
-            choices.append(j)
+    if inv:
+        choices = list(range(*cfg.objects[0]))
+    else:
+        choices = []
+        for i in cfg.limit_range:
+            for j in range(i[0], i[1]):
+                choices.append(j)
 
     # print the loaded protein sequence
+    self.x_seqs = cfg.antigen[0] if inv else self.x_seqs
     init_seqs = self.x_seqs
     print(f'Init sequence: {init_seqs}')
-    print(f'Mutation range: {cfg.limit_range} / {L}')
-    for i in cfg.limit_range:
-        print(f"Mutation strings: {init_seqs[i[0]:i[1]]}")
+    if not inv:
+        print(f'Mutation range: {cfg.limit_range} / {L}')
+        for i in cfg.limit_range:
+            print(f"Mutation strings: {init_seqs[i[0]:i[1]]}")
 
     # random init for the given range
     if cfg.limit_range_random_init:
@@ -58,6 +64,7 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
     self.best_seq = []
     itr = self.stepper(range(cfg.num_iter), cfg=cfg)
     itr = tqdm(itr, total=cfg.num_iter, disable=disable_tqdm)
+    antibody = self.init_seqs
     for step, s_cfg in itr:
         x = self.x_seqs
         a_cfg = s_cfg.accept_reject
@@ -79,11 +86,20 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
         # log A(x',x) = log P(x') - log P(x))
         # for current input x, proposal x', target distribution P and symmetric proposal.
         if not self.best_seq:
-            log_P_x, logs_x = self.calc_total_loss(x, s_cfg)  # [B]
+            if inv:
+                s_cfg.antigen = [x]
+                log_P_x, logs_x = self.calc_total_loss(antibody, s_cfg)  # [B]
+            else:
+                log_P_x, logs_x = self.calc_total_loss(x, s_cfg)  # [B]
             self.origin_seq = [-1, log_P_x.item(), x, logs_x]
             # import pdb; pdb.set_trace()
 
-        log_P_xp, logs_xp = self.calc_total_loss(xp, s_cfg)  # [B]
+        if inv:
+            s_cfg.antigen = [xp]
+            log_P_xp, logs_xp = self.calc_total_loss(antibody, s_cfg)  # [B]
+        else:
+            log_P_xp, logs_xp = self.calc_total_loss(xp, s_cfg)  # [B]
+        
         if len(self.best_seq) < s_cfg.keep_best or log_P_xp < self.best_seq[-1][1]:
             # print(step, logs_xp)
             self.best_seq.append([step, log_P_xp.item(), xp, logs_xp])
