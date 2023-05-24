@@ -1,0 +1,60 @@
+dataset_path: {{ dataset }}
+
+dataset:
+  class: falsePOS
+  path: ~/scratch/jingao/Auto-Evolution/data/false_positive
+  atom_feature: null
+  bond_feature: null
+  transform:
+    class: ProteinView
+    view: residue
+
+transform:
+  class: ProteinView
+  view: residue
+
+task:
+  class: PropertyPrediction
+  model:
+    class: FusionNetwork
+    sequence_model:
+      class: ESM
+      path: ~/scratch/jingao/Auto-Evolution/ckpt/protein-model-weights/esm-model-weights/
+      model: ESM-2-650M
+    structure_model:
+      class: GearNet
+      input_dim: 1280
+      hidden_dims: [512, 512, 512, 512, 512, 512]
+      batch_norm: True
+      concat_hidden: True
+      short_cut: True
+      readout: 'sum'
+      num_relation: 7
+      edge_input_dim: 59
+      num_angle_bin: 8
+  graph_construction_model:
+    class: GraphConstruction
+    node_layers:
+      - class: AlphaCarbonNode
+    edge_layers:
+      - class: SequentialEdge
+        max_distance: 2
+      - class: SpatialEdge
+        radius: 10.0
+        min_distance: 5
+      - class: KNNEdge
+        k: 10
+        min_distance: 5
+    edge_feature: gearnet
+  criterion: mse
+  metric: ['mae', 'rmse', 'spearmanr', 'pearsonr']
+  num_mlp_layer: 3
+  task: "activity"
+
+# checkpoint: {{ ckpt }}
+checkpoint: /home/dqwang/scratch/jingao/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-23-15-10-27/model_epoch_20.pth
+batch_size: 2
+gpu: 0
+tag: model5
+start: 160000
+end: 170000

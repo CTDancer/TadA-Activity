@@ -16,32 +16,33 @@ def sample(seed):
     save_interval = 1
     conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
     conf_w = [-100]
+    falsePOS_w = [-10]
     keep_best = 10
     num_recycles = 4
     temperature = 0.01
-    focus_on_antigen = True
     conf_w_str = 'conf' if not conf_nonlinear else conf_nonlinear
-    path = f'output/ESM5_covid-focus_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_T{temperature}_seed{seed}.fasta'
+    path = f'output/ESM3_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_falsePOS{falsePOS_w[0]}_T{temperature}_seed{seed}.fasta'
     print(path)
     # pdb_dir = f'output/pdb_ESM3_fold-i{num_recycles}_I-{iteration}_conf-{conf_w_str}_T{temperature}_seed{seed}'
     pdb_dir = ''
     print(pdb_dir)
+    regressor_cfg_path = 'conf/FalsePositive_esm_gearnet.yaml'
 
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
         cfg = hydra.compose(
-            # config_name="config_fold_3fingers",
-            config_name="config_covid19_3fingers",
+            config_name="config_fold_3fingers",
             overrides=[
                 f"task={TASK}",
                 f"seed={seed}",
                 "debug=False",
                 "seq_init_random=False",
+                f"+regressor_cfg_path={regressor_cfg_path}",
                 f"tasks.fixedseqs_fold.keep_best={keep_best}",
                 f'tasks.fixedseqs_fold.path={path}',
                 f'tasks.fixedseqs_fold.pdb_dir={pdb_dir}',
                 f'tasks.fixedseqs_fold.save_interval={save_interval}',
-                f'+tasks.fixedseqs_fold.focus_on_antigen={focus_on_antigen}',
+                f'+tasks.fixedseqs_fold.accept_reject.energy_cfg.falsePOS_w={falsePOS_w}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_w={conf_w}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_nonlinear={conf_nonlinear}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.num_recycles={num_recycles}',

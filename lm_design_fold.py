@@ -1,71 +1,32 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
-
-# core
 import logging
 import os
 import sys
 import time
-
-from omegaconf import DictConfig
 import hydra
-import os
 from pathlib import Path
-import sys
-import time
-import logging
-
 from scipy.spatial import ConvexHull
-import numpy as np
 from omegaconf import DictConfig, OmegaConf
 import torch
-import torch.nn.functional as F
+import esm
+from torchdrug import core, data
+
+from utils.scheduler import SchedulerSpec, to_scheduler, set_scheduler_repo
+from utils.fold import get_xyz, calc_fold_conf, calc_distance
+from utils.sampling import set_rng_seeds
+from utils.fixedseq_ESMFold import stage_fixedseqs_fold
+from utils.gearnet import bio_load_pdb, load_config
+
 
 # make sure script started from the root of the this file
 assert Path.cwd().name == 'Interact'
-import esm
-from esm.data import Alphabet
-
-from utils.scheduler import SchedulerSpec, to_scheduler, set_scheduler_repo
-import utils.pdb_loader as pdb_loader
-from utils.loss import get_cce_loss
-from utils.lm import lm_marginal
-from utils.masking import assert_valid_mask
-from utils.sampling import (
-    set_rng_seeds,
-)
-from utils.constants import COORDS_ANGLE_NAMES, COORDS4D_NAMES
-import utils.struct_models as struct_models
-from utils.free_generation import stage_free_generation
-from utils.fixedbb import stage_fixedbb
-from utils.fixedseq import stage_fixedseqs
-from utils.fixedseq_ESMFold import stage_fixedseqs_fold
-from utils.lm import WrapLmEsm
-
-from utils.tensor import (
-    assert_shape,
-)
-from utils import ngram as ngram_utils
-from openfold.utils.feats import atom14_to_atom37
-
 
 logger = logging.getLogger(__name__)  # Hydra configured
 os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
 
 class Designer:
-    standard_AA = 'LAGVSERTIDPKQNFYMHWC'
 
-    def __init__(
-        self,
-        cfg,
-        device=None,
-        fp16=False
-    ):
-        self.fp16 = fp16
+    def __init__(self, cfg, device=None):
         ## Initialize models
         if device:
             self.device = device
@@ -90,6 +51,9 @@ class Designer:
         self.init_seqs = self.x_seqs
 
         torch.backends.cudnn.benchmark = True  # Slightly faster runtime for optimization
+        if self.cfg.get('regressor_cfg_path', None):
+            self.regressor_init(self.cfg.regressor_cfg_path)
+        
         logger.info("Finished Designer init")
 
 
@@ -97,61 +61,49 @@ class Designer:
         l_ag = [len(i) for i in antigen]
 
         output = self.struct_model.infer([ag + x_seq for ag in antigen], num_recycles=num_recycles)
-        xyz, plddt = self.get_xyz(output)
+        xyz, plddt = get_xyz(output)
 
         # for outside usage
         self.fold_output = output
         self.xyz = xyz
         
-        res = self.calc_distance(xyz, antigen, limit_range, objects,
+        res = calc_distance(xyz, antigen, limit_range, objects,
             selection=selection, reduction=reduction)
 
         return torch.tensor(res), plddt
 
+    def regressor_init(self, regressor_cfg_path):
 
-    def calc_fold_conf(self, x, plddt, cfg):
-        conf = []
-        l_ag = [len(i) for i in cfg.antigen]
-        for a in range(len(l_ag)):
-            assert plddt.shape[1] == l_ag[a] + len(x)
-            if cfg.get('focus_on_antigen', False):
-                idx = list(range(*cfg.objects[a]))
-                confidence = plddt[a, idx].max() / 100
-            else:
-                idx = list(range(l_ag[a] + cfg.len_linker, l_ag[a] + len(x))) + \
-                    list(range(*cfg.objects[a]))
-                confidence = plddt[a, idx].mean() / 100
-            conf.append(confidence)
-        return torch.tensor(conf)
-
-
-    def calc_struct_sim(self, p1, p2, cuda=False):
-        import open3d as o3d
-        import open3d.t.pipelines.registration as treg
-
-        source = o3d.t.geometry.PointCloud(p1)
-        target = o3d.t.geometry.PointCloud(p2)
-        if cuda:
-            source, target = source.cuda(), target.cuda()
-
-        voxel_sizes = o3d.utility.DoubleVector([0.1, 0.05, 0.025])
-        # List of Convergence-Criteria for Multi-Scale ICP:
-        criteria_list = [
-            treg.ICPConvergenceCriteria(relative_fitness=0.0001,
-                                        relative_rmse=0.0001,
-                                        max_iteration=20),
-            treg.ICPConvergenceCriteria(0.00001, 0.00001, 15),
-            treg.ICPConvergenceCriteria(0.000001, 0.000001, 10)
-        ]
-        max_correspondence_distances = o3d.utility.DoubleVector([128., 64., 32])
+        # init
+        cfg = load_config(regressor_cfg_path)
+        dataset = core.Configurable.load_config_dict(cfg.dataset)
+        task = core.Configurable.load_config_dict(cfg.task)
+        task.preprocess(dataset, None, None)
+        self.transform = core.Configurable.load_config_dict(cfg.transform)
+        pretrained_dict = torch.load(cfg.checkpoint, map_location=torch.device('cpu'))['model']
+        model_dict = task.state_dict()
+        task.load_state_dict(pretrained_dict)
+        self.task = task.cuda(self.device)
+        self.task.eval()
         
-        registration_ms_icp = treg.multi_scale_icp(
-            source, target, voxel_sizes,
-            criteria_list,
-            max_correspondence_distances,)
-        return registration_ms_icp.fitness, registration_ms_icp.inlier_rmse
+    def calc_regressor(self,):
+        pdbfile = self.struct_model.output_to_pdb(self.fold_output)
+        if not os.path.exists('output/tmp'):
+            os.makedirs('output/tmp')
+        tmp_path = 'output/tmp/regressor_tmp.pdb'
+        with open(tmp_path, 'w') as f:
+            f.write(pdbfile[0])
 
+        # torchdrug-style inference
+        proteins = [bio_load_pdb(tmp_path)[0]]
+        protein = data.Protein.pack(proteins).cuda(self.device)
+        batch = self.transform({"graph": protein})
+        with torch.no_grad():
+            pred = self.task.predict(batch)
 
+        return pred.cpu()
+
+            
     def calc_total_loss(self, x, cfg):
         """
             Easy one-stop-shop that calls out to all the implemented loss calculators,
@@ -161,17 +113,12 @@ class Designer:
         logs = {}
         total_loss = 0
         e_cfg = cfg.accept_reject.energy_cfg
-        if e_cfg.dist_w:
-            dist_m_nlls = self.calc_dist_loss(x, cfg.objects, e_cfg.selection, e_cfg.reduction)
-            dist_m_nlls *= dist_w
-            total_loss += dist_m_nlls
-            logs['dist_loss'] = dist_m_nlls
         if e_cfg.fold_w:
             fold_m_nlls, plddt = self.calc_fold_loss(x, cfg.antigen, cfg.objects, cfg.limit_range,
                 e_cfg.selection, e_cfg.reduction, e_cfg.num_recycles)
             fold_m_nlls = (fold_m_nlls * torch.tensor(e_cfg.fold_w)).sum()
             logs['fold_loss'] = fold_m_nlls.item()
-            fold_conf = self.calc_fold_conf(x, plddt, cfg)
+            fold_conf = calc_fold_conf(x, plddt, cfg)
             logs['fold_conf'] = fold_conf.item()
             if e_cfg.conf_nonlinear == 'relu':
                 fold_conf[fold_conf < 0.85] = 0
@@ -184,52 +131,14 @@ class Designer:
             fold_conf_loss = (fold_conf * torch.tensor(e_cfg.conf_w)).sum()
             logs['fold_conf_loss'] = fold_conf_loss.item()
             total_loss += fold_m_nlls + fold_conf_loss
+        if e_cfg.get('falsePOS_w', None):
+            reg_loss = self.calc_regressor()
+            falsePOS_loss = (reg_loss * torch.tensor(e_cfg.falsePOS_w)).sum()
+            logs['falsePOS_loss'] = falsePOS_loss.item()
+            total_loss += falsePOS_loss
         logs['total_loss'] = total_loss.item()
 
         return total_loss, logs  # [B], Dict[str:[B]]
-
-
-    def calc_distance(self, xyz, antigen, limit_range, objects, selection='min', reduction='mean'):
-        if isinstance(antigen, str):
-            antigen = [antigen]
-        l_ag = [len(i) for i in antigen]
-        res = []
-        for a in range(xyz.shape[0]):
-            dist = []
-            for t in range(len(limit_range)):
-                dist_hand = []
-                for j in range(*limit_range[t]):
-                    dist_ob = [
-                        torch.norm(xyz[a, i] - xyz[a, j + l_ag[a]], p = 2)
-                        for i in range(*objects[a])
-                    ]
-                    dist_hand.append(torch.tensor(dist_ob).mean())
-                dist_hand = torch.tensor(dist_hand)
-                if selection == 'min':
-                    dist.append(dist_hand.min())
-                elif selection == 'max':
-                    dist.append(dist_hand.max())
-                else:
-                    dist.append(dist_hand.mean())
-
-            if reduction == 'mean':
-                dist = torch.tensor(dist).mean()
-            elif reduction == 'prod':
-                dist = torch.tensor(dist).prod()
-            else:
-                raise NotImplementedError(f'No such reduction: {reduction}')
-            res.append(dist)
-        return res
-
-
-    def get_xyz(self, output):
-        # average on all atoms of a protein
-        idx = output["atom37_atom_exists"]
-        idx_sum = idx.sum(dim=2)
-        plddt = (output["plddt"] * idx).sum(dim=2) / idx_sum
-        xyz = atom14_to_atom37(output["positions"][-1], output)  # [B, L, 3]
-        xyz = (xyz * idx[..., None].repeat(1,1,1,3)).sum(dim=2) / idx_sum[..., None].repeat(1,1,3)
-        return xyz, plddt
 
 
     def find_interest(self, 
@@ -244,22 +153,20 @@ class Designer:
             len_insterest = [len_insterest]
 
         output = self.struct_model.infer([antigen + antibody], num_recycles=num_recycles)
-        xyz, plddt = self.get_xyz(output)
+        xyz, plddt = get_xyz(output)
 
         losses = []
         if mode == 'brute':
             for l in len_insterest:
                 for i in range(len(antigen) - l):
-                    losses.append([
-                        self.calc_distance(xyz, antigen, limit_range, [[i, i+l]]), i, i+l])
+                    losses.append([calc_distance(xyz, antigen, limit_range, [[i, i+l]]), i, i+l])
         elif mode == 'convexhull':
             hull = ConvexHull(xyz[0].cpu().numpy())
             for l in len_insterest:
                 for i in range(len(antigen) - l):
                     if sum([i in hull.vertices for i in range(i,i+l)]) == 0:
                         continue
-                    losses.append([
-                        self.calc_distance(xyz, antigen, limit_range, [[i, i+l]]), i, i+l])
+                    losses.append([calc_distance(xyz, antigen, limit_range, [[i, i+l]]), i, i+l])
         
         losses = sorted(losses, key=lambda x: x[0])
         return losses
@@ -275,11 +182,7 @@ class Designer:
         logger.info(f'Designing sequence for task: {self.cfg.task}')
         
         design_cfg = self.cfg.tasks[self.cfg.task]
-        if self.cfg.task == 'fixedseq':
-            stage_fixedseq(self, design_cfg)
-        elif self.cfg.task == 'fixedseqs':
-            stage_fixedseqs(self, design_cfg)
-        elif self.cfg.task == 'fixedseqs_fold':
+        if self.cfg.task == 'fixedseqs_fold':
             stage_fixedseqs_fold(self, design_cfg)
         else:
             raise ValueError(f'Invalid task: {self.cfg.task}')

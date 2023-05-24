@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from scipy.spatial import ConvexHull
-
+from utils.icp import calc_struct_sim
 
 def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute'):
     if isinstance(len_insterest, int):
@@ -62,7 +62,7 @@ def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute')
         loss, logs = des.calc_total_loss(antibody, cfg.tasks[cfg.task])
         
         # for structural similarity
-        fitness, rmse = des.calc_struct_sim(xyz_antigen[i:i+l], 
+        fitness, rmse = calc_struct_sim(xyz_antigen[i:i+l], 
             des.xyz[0, 0:l].cpu().numpy(), cuda=False)
         struct_loss = rmse * struct_w[0]
         loss += struct_loss
