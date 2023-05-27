@@ -12,16 +12,16 @@ def count_diff(a, b):
 
 def sample(seed):
     TASK = "fixedseqs_fold"
-    iteration = 1000
+    iteration = 20000
     save_interval = 1
     conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
-    conf_w = [-100]
-    falsePOS_w = [-100]
-    keep_best = 10
+    conf_w = [-200]
+    falsePOS_w = [-10]
+    keep_best = 100
     num_recycles = 4
-    temperature = 0.01
+    temperature = 1
     conf_w_str = 'conf' if not conf_nonlinear else conf_nonlinear
-    path = f'output/ESM3_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_falsePOS{falsePOS_w[0]}_T{temperature}_seed{seed}.fasta'
+    path = f'output/18k/ESM3_fold-i{num_recycles}_I-{iteration}_{conf_w_str}{conf_w[0]}_falsePOS{falsePOS_w[0]}_T{temperature}_seed{seed}.fasta'
     print(path)
     # pdb_dir = f'output/pdb_ESM3_fold-i{num_recycles}_I-{iteration}_conf-{conf_w_str}_T{temperature}_seed{seed}'
     pdb_dir = ''

@@ -144,23 +144,21 @@ class falsePOS(V5):
 
         pkl_file = os.path.join(path, self.processed_file)
         
+        pdb_files = glob.glob(os.path.join(path, 'pdb', "*.pdb"))
+        pdb_files = sorted(pdb_files)
+        score_dict = [-1] * len(pdb_files)
+
+        # select a fraction
+        num_pos = len(pdb_files) // 3
+        pdb_files += num_pos * [os.path.join(path, "ESM5.pdb")]
+        score_dict += [1] * num_pos
+        
         if os.path.exists(pkl_file):
             self.load_pickle(pkl_file, verbose=verbose, **kwargs)
         else:
-            pdb_files = glob.glob(os.path.join(path, 'pdb', "*.pdb"))
-            pdb_files = sorted(pdb_files)
-            # pdb_files = sorted(pdb_files, key=lambda x: score_dict[x])
-            # select a fraction
-            # pdb_files = pdb_files[: 17129//2]
-            pdb_files += len(pdb_files)//4 * [os.path.join(path, "ESM5.pdb")]
-
-            # load pdbs
             self.load_pdbs(pdb_files, verbose=verbose, **kwargs)
             self.save_pickle(pkl_file, verbose=verbose)
-        score_file = os.path.join(path, "Loss_fold-i4.tsv")
-        score_dict = self.get_score_dict(score_file)
-        activitity = [score_dict[os.path.basename(pdb_file)[:-4]] // 80  for pdb_file in self.pdb_files]
-        self.targets = {"activity": activitity}
+        self.targets = {"activity": score_dict}
 
     def get_score_dict(self, score_file):
         with open(score_file, "r") as fin:

@@ -52,7 +52,8 @@ task:
   task: "activity"
 
 # checkpoint: {{ ckpt }}
-checkpoint: /home/dqwang/scratch/jingao/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-23-15-10-27/model_epoch_20.pth
+# checkpoint: /home/dqwang/scratch/jingao/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-23-15-10-27/model_epoch_20.pth
+checkpoint: /home/dqwang/scratch/jingao/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-26-16-03-50/model_epoch_8.pth
 batch_size: 2
 gpu: 0
 tag: model5

@@ -90,7 +90,8 @@ class Designer:
         pdbfile = self.struct_model.output_to_pdb(self.fold_output)
         if not os.path.exists('output/tmp'):
             os.makedirs('output/tmp')
-        tmp_path = 'output/tmp/regressor_tmp.pdb'
+        idx = os.path.basename(self.cfg.tasks.fixedseqs_fold.path).split('.')[0]
+        tmp_path = f'output/tmp/regressor_tmp_{idx}.pdb'
         with open(tmp_path, 'w') as f:
             f.write(pdbfile[0])
 
