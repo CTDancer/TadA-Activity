@@ -6,7 +6,7 @@ from tqdm import tqdm
 import jinja2
 import yaml
 import easydict
-
+from collections import defaultdict
 import torch
 from torch import nn
 import numpy as np
@@ -47,6 +47,105 @@ def bio_load_pdb(pdb_file):
                 atom2residue=atom2residue, occupancy=occupancy, b_factor=b_factor,
                 residue_number=residue_number, node_position=node_position, residue_feature=residue_feature
             ), "".join([data.Protein.id2residue_symbol[res] for res in residue_type])
+
+
+@R.register("datasets.Vactivity")
+class Vactivity(data.ProteinDataset):
+
+    processed_file = "Vactivity.pkl.gz"
+
+    def __init__(self, path, split_ratio=(0.6, 0.2, 0.2), discrete_label=False, verbose=1, label_file='20230927tada_balanced.csv', **kwargs):
+        path = os.path.expanduser(path)
+        if not os.path.exists(path):
+            os.makedirs(path)
+        self.path = path
+        self.split_ratio = split_ratio
+        self.discrete_label = discrete_label
+        
+        pkl_file = os.path.join(path, self.processed_file)
+
+        if os.path.exists(pkl_file):
+            self.load_pickle(pkl_file, verbose=verbose, **kwargs)
+        else:
+            pdb_files = sorted(glob.glob(os.path.join(path, 'pdb', "*.pdb")))
+            self.load_pdbs(pdb_files, verbose=verbose, **kwargs)
+            self.save_pickle(pkl_file, verbose=verbose)
+
+        # for balance
+        self.name2data = {os.path.basename(self.pdb_files[i])[:-4]: i for i in range(len(self.pdb_files))}
+        label_file = os.path.join(path, label_file)
+        self.label_list, self.label_dict = self.get_label_list(label_file)
+        activitity = [self.label_dict[name] for name in self.label_list]
+        self.targets = {"activity": activitity}
+        if self.discrete_label:
+            num_labels = defaultdict(int)
+            for i in activitity:
+                num_labels[i] += 1
+            print(num_labels)
+
+    def load_pdbs(self, pdb_files, transform=None, lazy=False, verbose=0, **kwargs):
+        num_sample = len(pdb_files)
+        if num_sample > 1000000:
+            warnings.warn("Preprocessing proteins of a large dataset consumes a lot of CPU memory and time. "
+                          "Use load_pdbs(lazy=True) to construct molecules in the dataloader instead.")
+
+        self.transform = transform
+        self.lazy = lazy
+        self.kwargs = kwargs
+        self.data = []
+        self.pdb_files = []
+        self.sequences = []
+
+        if verbose:
+            pdb_files = tqdm(pdb_files, "Constructing proteins from pdbs")
+        for i, pdb_file in enumerate(pdb_files):
+            protein, sequence = bio_load_pdb(pdb_file)
+            if hasattr(protein, "residue_feature"):
+                with protein.residue():
+                    protein.residue_feature = protein.residue_feature.to_sparse()
+            self.data.append(protein)
+            self.pdb_files.append(pdb_file)
+            self.sequences.append(sequence)
+
+    def get_label_list(self, label_file):
+        with open(label_file, "r") as fin:
+            lines = [line.strip() for line in fin.readlines()][2:]
+        label_dict = {}
+        label_list = []
+        for line in lines:
+            name, sequence, activity = line.split(",")
+            activity = float(activity)
+            if self.discrete_label:
+                label_dict[name] = (activity > 5)
+            else:
+                label_dict[name] = activity
+            label_list.append(name)
+        return label_list, label_dict
+
+    def split(self, split_ratio=None):
+        split_ratio = split_ratio or self.split_ratio
+        num_samples = [int(len(self) * ratio) for ratio in split_ratio]
+        num_samples[-1] = len(self) - sum(num_samples[:-1])
+        splits = torch.utils.data.random_split(self, num_samples)
+        return splits
+    
+    def get_item(self, index):
+        name = self.label_list[index]
+        index = self.name2data[name]
+        if self.lazy:
+            protein = data.Protein.from_pdb(self.pdb_files[index], self.kwargs)
+        else:
+            protein = self.data[index].clone()
+        if hasattr(protein, "residue_feature"):
+            with protein.residue():
+                protein.residue_feature = protein.residue_feature.to_dense()
+        item = {"graph": protein, "activity": self.label_dict[name]}
+        if self.transform:
+            item = self.transform(item)
+        return item
+    
+    def __len__(self):
+        return len(self.label_list)
 
 
 @R.register("datasets.V5")
@@ -171,6 +270,7 @@ class falsePOS(V5):
         return score_dict
 
 
+    
 def load_config(cfg_file, context={}):
     with open(cfg_file, "r") as fin:
         raw = fin.read()

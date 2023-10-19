@@ -67,6 +67,10 @@ class Designer:
         self.fold_output = output
         self.xyz = xyz
         
+        # For single protein evolution
+        if sum(l_ag) == 0:
+            return 0, plddt
+        
         res = calc_distance(xyz, antigen, limit_range, objects,
             selection=selection, reduction=reduction)
 
@@ -85,12 +89,12 @@ class Designer:
         task.load_state_dict(pretrained_dict)
         self.task = task.cuda(self.device)
         self.task.eval()
-        
+
     def calc_regressor(self,):
         pdbfile = self.struct_model.output_to_pdb(self.fold_output)
         if not os.path.exists('output/tmp'):
             os.makedirs('output/tmp')
-        idx = os.path.basename(self.cfg.tasks.fixedseqs_fold.path).split('.')[0]
+        idx = self.cfg.tasks.fixedseqs_fold.folder_name
         tmp_path = f'output/tmp/regressor_tmp_{idx}.pdb'
         with open(tmp_path, 'w') as f:
             f.write(pdbfile[0])
@@ -104,7 +108,6 @@ class Designer:
 
         return pred.cpu()
 
-            
     def calc_total_loss(self, x, cfg):
         """
             Easy one-stop-shop that calls out to all the implemented loss calculators,
@@ -140,7 +143,6 @@ class Designer:
         logs['total_loss'] = total_loss.item()
 
         return total_loss, logs  # [B], Dict[str:[B]]
-
 
     def find_interest(self, 
         antigen, 

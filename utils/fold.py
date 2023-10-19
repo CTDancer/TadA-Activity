@@ -11,11 +11,12 @@ def calc_fold_conf(x, plddt, cfg):
         assert plddt.shape[1] == l_ag[a] + len(x)
         if cfg.get('focus_on_antigen', False):
             idx = list(range(*cfg.objects[a]))
-            confidence = plddt[a, idx].max() / 100
+        elif cfg.get('focus', None):
+            idx = list(range(*cfg.focus[a]))
         else:
             idx = list(range(l_ag[a] + cfg.len_linker, l_ag[a] + len(x))) + \
                 list(range(*cfg.objects[a]))
-            confidence = plddt[a, idx].mean() / 100
+        confidence = plddt[a, idx].mean() / 100
         conf.append(confidence)
     return torch.tensor(conf)
 

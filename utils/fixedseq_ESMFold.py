@@ -92,7 +92,6 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
             else:
                 log_P_x, logs_x = self.calc_total_loss(x, s_cfg)  # [B]
             self.origin_seq = [-1, log_P_x.item(), x, logs_x]
-            # import pdb; pdb.set_trace()
 
         if inv:
             s_cfg.antigen = [xp]
