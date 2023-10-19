@@ -22,9 +22,12 @@ def sample(seed):
     num_recycles = 4
     temperature = 0.01
     focus = [False, [[7, 150]]][1]
-    conf_focus_str = 'focus-' if focus else ''
-    conf_w_str = 'conf' if not conf_nonlinear else conf_nonlinear
-    folder_name = f'TadA_fold-i{num_recycles}_I-{iteration}_{conf_focus_str}{conf_w_str}{conf_w[0]}_Activity{falsePOS_w[0]}_T{temperature}_seed{seed}'
+    heuristic_evolution = True
+    str_heur = 'Heur_' if heuristic_evolution else ''
+    str_conf_focus= 'focus-' if focus else ''
+    str_conf_w = 'conf' if not conf_nonlinear else conf_nonlinear
+    
+    folder_name = f'TadA_fold-i{num_recycles}_I-{iteration}_{str_heur}{str_conf_focus}{str_conf_w}{conf_w[0]}_Activity{falsePOS_w[0]}_T{temperature}_seed{seed}'
     path = f'output/{folder_name}/sequences.fasta'
     print(path)
     pdb_dir = f'output/{folder_name}/pdb'
@@ -48,6 +51,7 @@ def sample(seed):
                 f'tasks.fixedseqs_fold.pdb_dir={pdb_dir}',
                 f"+tasks.fixedseqs_fold.focus={focus}",
                 f'tasks.fixedseqs_fold.save_interval={save_interval}',
+                f'+tasks.fixedseqs_fold.heuristic_evolution={heuristic_evolution}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_w={conf_w}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.falsePOS_w={falsePOS_w}',
                 f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_nonlinear={conf_nonlinear}',

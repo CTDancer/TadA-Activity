@@ -4,12 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 import os
 import logging
+import random
 
 import torch
 import torch.nn.functional as F
 from torch.distributions import Bernoulli, OneHotCategorical
 from tqdm import tqdm
 from openfold.np import residue_constants
+from esm.data import Alphabet
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +23,9 @@ def count_diff(a, b):
     return cnt
 
 
-def substitute(s: str, i: int, target: str):
+def substitute(s: str, i: int, tar: str):
     s = list(s)
-    s[i] = target
+    s[i] = tar
     s = "".join(s)
     return s
 
@@ -42,8 +45,7 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
     else:
         choices = []
         for i in cfg.limit_range:
-            for j in range(i[0], i[1]):
-                choices.append(j)
+            choices += list(range(*i))
 
     # print the loaded protein sequence
     self.x_seqs = cfg.antigen[0] if inv else self.x_seqs
@@ -65,20 +67,38 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
     itr = self.stepper(range(cfg.num_iter), cfg=cfg)
     itr = tqdm(itr, total=cfg.num_iter, disable=disable_tqdm)
     antibody = self.init_seqs
+    heur = cfg.accept_reject.get('heuristic_evolution', False)
+    if heur:
+        alphabet = Alphabet.from_architecture('ESM-1b')
+        
     for step, s_cfg in itr:
         x = self.x_seqs
-        a_cfg = s_cfg.accept_reject
         updated = False
 
         ##############################
         # Proposal
         ##############################
         # Decide which position to mutate == {i}. Mask 1 place
-        idx = torch.randint(0, len(choices), (B,))
-        target = torch.randint(0, K, (B,))
-        while x[choices[idx[0]]] == vocab[target[0]]:
-            target = torch.randint(0, K, (B,))
-        xp = substitute(x, choices[idx[0]], vocab[target[0]])
+        pos = choices[torch.randint(0, len(choices), (B,))[0]]
+        if heur:
+            batch_converter = alphabet.get_batch_converter()
+            self.struct_model.esm.eval()
+            data = [('protein'), substitute(x, pos, '<mask>')]
+            batch_labels, batch_strs, batch_tokens = batch_converter(data)
+            batch_lens = (batch_tokens != alphabet.padding_idx).sum(1)
+            with torch.no_grad():
+                results = self.struct_model.esm(batch_tokens, repr_layers=[33])
+                assert results['logits'][0].shape[0] == len(x) + 2  # <cls>, ..., <eos>
+                AA_prob = results['logits'][0][pos+1].softmax()
+        
+        while True:
+            if heur:  # Heuristic selection of AA
+                target = random.choices(alphabet.all_toks, weights=AA_prob, k=1)
+            else:  # Random selection of AA
+                target = vocab[torch.randint(0, K, (B,))[0]]
+            if x[pos] != target and x[pos] in vocab:
+                break
+        xp = substitute(x, pos, target)
 
         ##############################
         # Accept / reject
@@ -104,7 +124,7 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
             self.best_seq.append([step, log_P_xp.item(), xp, logs_xp])
             self.best_seq = sorted(self.best_seq, key=lambda x: x[1])[:s_cfg.keep_best]
             updated = True
-        log_A_xp_x = (-log_P_xp - -log_P_x) / a_cfg.temperature  # [B]
+        log_A_xp_x = (-log_P_xp - -log_P_x) / s_cfg.accept_reject.temperature  # [B]
         A_xp_x = (log_A_xp_x).exp().clamp(0, 1)  # [B]
         # A_xp_x = log_A_xp_x.sigmoid()  # [B]
         # import pdb; pdb.set_trace()
