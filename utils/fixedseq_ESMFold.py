@@ -79,8 +79,17 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
         # Proposal
         ##############################
         # Decide which position to mutate == {i}. Mask 1 place
-        pos = choices[torch.randint(0, len(choices), (B,))[0]]
-        if heur:
+        
+        if not heur:
+            plans = [[p, a] for p in range(len(choices)) for a in range(K)]
+            while True:
+                assert len(plans) > 0, f'No plan satisfies the max_mute {s_cfg.max_mute}'
+                plan = plans.pop(random.randint(0, len(plans) - 1))
+                xp = substitute(x, choices[plan[0]], vocab[plan[1]])
+                if count_diff(init_seqs, xp) <= s_cfg.max_mute:
+                    break
+        else:  # Heuristic selection of AA
+            pos = choices[torch.randint(0, len(choices), (B,))[0]]
             batch_converter = alphabet.get_batch_converter()
             self.struct_model.esm.eval()
             data = [('protein'), substitute(x, pos, '<mask>')]
@@ -91,14 +100,11 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
                 assert results['logits'][0].shape[0] == len(x) + 2  # <cls>, ..., <eos>
                 AA_prob = results['logits'][0][pos+1].softmax()
         
-        while True:
-            if heur:  # Heuristic selection of AA
+            while True: 
                 target = random.choices(alphabet.all_toks, weights=AA_prob, k=1)
-            else:  # Random selection of AA
-                target = vocab[torch.randint(0, K, (B,))[0]]
-            if x[pos] != target and x[pos] in vocab:
-                break
-        xp = substitute(x, pos, target)
+                if x[pos] != target and target in vocab:
+                    break
+            xp = substitute(x, pos, target)
 
         ##############################
         # Accept / reject
@@ -146,7 +152,7 @@ def stage_fixedseqs_fold(self, cfg, disable_tqdm=False):
             if not os.path.exists(os.path.dirname(cfg.path)):
                 os.makedirs(os.path.dirname(cfg.path))
             with open(cfg.path, 'a') as f:
-                f.write(f'>sample_iter{step}_{logs_x}\n')
+                f.write(f'>sample_iter{step}_{logs_x}_Diff{diff_point}\n')
                 f.write(f'{self.x_seqs}\n')
 
             if not cfg.pdb_dir: continue

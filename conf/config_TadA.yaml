@@ -33,10 +33,12 @@ tasks:
         num_recycles: 1  # 1,2,3,4
         conf_nonlinear:  # 'relu', 'leakyrelu', '2', '3'
       temperature:
-        scheduler: ConstantLR
-        initial: 0.1
+        scheduler: StepLR
+        step_size: 4000
+        gamma: 0.5
+        initial: 8
     len_linker: 0
-    limit_range: [[0, 168]]
+    limit_range: [[1, 168]]
     antigen: ['']
     objects: [[0, 0]]
     path: '.'
