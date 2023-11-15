@@ -10,11 +10,8 @@ allow_missing_residue_coords: True
 # suppress_AA: 'C'
 disable_cuda: False
 cuda_device_idx:  # Set to numberic value to override default GPU device used.
-task: fixedseqs_fold  # fixedbb or free_generation or fixedpos
-free_generation_length: 100
+task: stage_Astar_fold  # fixedbb or free_generation or fixedpos
 seq_init_random: False
-# antibody: MSEVEFSHEYWMRHALTLAKRARDEREVPVGAVLVLNNRVIGEGWNRAIGLHDPTAHAEIMALRQGGLVMQNYRLIDATLYVTFEPCVMCAGAMIHSRIGRVVFGVRNSKRGAAGSLMNVLNYPGMNHRVEITEGILADECAALLCDFYRMPRQVFNAQKKAQSSIN
-antibody: MNQDSRHVEFMNLAMDQARIAYALGEVPIGAVIVKDDEVIACSYNQTEQLQNPTGHAELLVIESASKKLKTRRLLDCTLYVTLEPCAMCAGAIILSRIPIIYFASKDPKAGAVQSLYELLNDKRLNHQCEVHQGFMAKESSELLSSFFRELREGSILKTKELGNNSEA
 debug: False
 
 tasks:
@@ -31,7 +28,7 @@ tasks:
         conf_w: [-1]  # later sum
         falsePOS_w: [1]  # later sum
         num_recycles: 1  # 1,2,3,4
-        conf_nonlinear:  # 'relu', 'leakyrelu', '2', '3'
+        conf_nonlinear: None # 'relu', 'leakyrelu', '2', '3'
       temperature:
         scheduler: StepLR
         step_size: 4000
@@ -44,7 +41,6 @@ tasks:
     path: '.'
     pdb_dir: '.output/pdb'
     save_interval: 100
-    limit_range_random_init: False
 
 
 

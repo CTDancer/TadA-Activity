@@ -138,6 +138,7 @@ class Designer:
             total_loss += fold_m_nlls + fold_conf_loss
         if e_cfg.get('falsePOS_w', None):
             reg_loss = self.calc_regressor()
+            logs['activity'] = reg_loss.item()
             falsePOS_loss = (reg_loss * torch.tensor(e_cfg.falsePOS_w)).sum()
             logs['falsePOS_loss'] = falsePOS_loss.item()
             total_loss += falsePOS_loss

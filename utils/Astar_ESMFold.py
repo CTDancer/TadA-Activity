@@ -5,6 +5,7 @@
 import os
 import logging
 import random
+import queue
 
 import torch
 import torch.nn.functional as F
@@ -32,7 +33,7 @@ def substitute(s: str, i: int, tar: str):
 
 @torch.no_grad()
 def stage_Astar_fold(self, cfg, disable_tqdm=False):
-    """Metropolis-Hastings sampling with uniform proposal and energy-based acceptance."""
+    """Astar search + multi-branch"""
     vocab = residue_constants.restypes
     K = len(vocab)
     L =  len(self.x_seqs)
@@ -43,47 +44,34 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
         choices += list(range(*i))
 
     # print the loaded protein sequence
-    self.x_seqs = self.x_seqs
-    init_seqs = self.x_seqs
-    print(f'Init sequence: {init_seqs}')
-    print(f'Mutation range: {cfg.limit_range} / {L}')
-    for i in cfg.limit_range:
-        print(f"Mutation strings: {init_seqs[i[0]:i[1]]}")
-
-    # random init for the given range
-    if cfg.limit_range_random_init:
-        for c in choices:
-            init_i = torch.randint(0, K, (B, ))
-            self.x_seqs = substitute(self.x_seqs, c, vocab[init_i[0]])
-        print(f'Random init sequence: {self.x_seqs}')
+    self.queue_activity = queue.PriorityQueue()
+    for seq in self.x_seqs:
+        self.queue_activity.put((-1., seq))
+    self.visited = dict()
     
-    self.best_seq = []
+    print(f'Init queue: {self.queue_activity.qsize()}')
+    print(f'Mutation range: {cfg.limit_range} / {L}')
+
+    self.best_activity = 0
     itr = self.stepper(range(cfg.num_iter), cfg=cfg)
     itr = tqdm(itr, total=cfg.num_iter, disable=disable_tqdm)
-    antibody = self.init_seqs
     heur = cfg.accept_reject.get('heuristic_evolution', False)
     if heur:
         alphabet = Alphabet.from_architecture('ESM-1b')
         
     for step, s_cfg in itr:
-        x = self.x_seqs
+        x = self.queue_activity.get()
         updated = False
 
-        ##############################
-        # Proposal
-        ##############################
-        # Decide which position to mutate == {i}. Mask 1 place
-        
         if not heur:
             plans = [[p, a] for p in range(len(choices)) for a in range(K)]
             while True:
-                assert len(plans) > 0, f'No plan satisfies the max_mute {s_cfg.max_mute}'
                 plan = plans.pop(random.randint(0, len(plans) - 1))
                 xp = substitute(x, choices[plan[0]], vocab[plan[1]])
-                if count_diff(init_seqs, xp) <= s_cfg.max_mute:
+                if xp not in self.visited:
                     break
         else:  # Heuristic selection of AA
-            pos = choices[torch.randint(0, len(choices), (B,))[0]]
+            pos = choices[torch.randint(0, len(choices), (1,))[0]]
             batch_converter = alphabet.get_batch_converter()
             self.struct_model.esm.eval()
             data = [('protein'), substitute(x, pos, '<mask>')]
@@ -94,22 +82,20 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
                 assert results['logits'][0].shape[0] == len(x) + 2  # <cls>, ..., <eos>
                 AA_prob = results['logits'][0][pos+1].softmax()
         
-            while True: 
+            while True:
                 target = random.choices(alphabet.all_toks, weights=AA_prob, k=1)
-                if x[pos] != target and target in vocab:
+                xp = substitute(x, pos, target)
+                if (target in vocab) and (xp not in self.visited):
                     break
-            xp = substitute(x, pos, target)
+                AA_prob[alphabet.all_toks.index(target)] = 0
 
-        ##############################
-        # Accept / reject
-        ##############################
-        # log A(x',x) = log P(x') - log P(x))
-        # for current input x, proposal x', target distribution P and symmetric proposal.
-        if not self.best_seq:
-            log_P_x, logs_x = self.calc_total_loss(x, s_cfg)  # [B]
-            self.origin_seq = [-1, log_P_x.item(), x, logs_x]
 
-        log_P_xp, logs_xp = self.calc_total_loss(xp, s_cfg)  # [B]
+        total_loss, logs = self.calc_total_loss(xp, s_cfg)
+        confidence, activity = logs['fold_conf'], logs['activity']
+        self.visited[xp] = (confidence, activity)
+        
+        if confidence > 0.8:
+            self.queue_activity.put((activity, xp))
         
         if len(self.best_seq) < s_cfg.keep_best or log_P_xp < self.best_seq[-1][1]:
             # print(step, logs_xp)

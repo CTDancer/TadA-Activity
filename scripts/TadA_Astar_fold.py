@@ -21,16 +21,16 @@ def get_args():
                         help="Number of recycles to fold the protein structure. The higher, the more accurate.")
     parser.add_argument("--keep_best", type=int, default=10,
                         help="Number of proteins with top losses during the generation. The higher, the more are saved.")
-    parser.add_argument("--max_mute", type=int, default=30,
-                        help="Maximum different AA numbers from the init sequence. (0 for no limit)")
+    # parser.add_argument("--max_mute", type=int, default=30,
+    #                     help="Maximum different AA numbers from the init sequence. (0 for no limit)")
     parser.add_argument("--temperature", type=float, default=8,
                         help="Temperature to decide whether to make a 'bad' mutation. The higher, the harder.")
     parser.add_argument("--temperature_step_size", type=int, default=4000,
                         help="Step size to halve the temperature.")
     parser.add_argument("--heuristic_evolution", type=bool, default=False,
                         help="Whether to use the ESM as a generalist heuristic.")
-    parser.add_argument("--activity_w", nargs="+", type=float, default=[-0.1],
-                        help="The weight of activity loss.")
+    # parser.add_argument("--activity_w", nargs="+", type=float, default=[-0.1],
+    #                     help="The weight of activity loss.")
     parser.add_argument("--seed", type=int, default=1,
                         help="The random seed.")
 
@@ -39,55 +39,26 @@ def get_args():
 
 
 def get_protein(idx):
-    if isinstance(idx):
-        idx = [idx]
-    # default 0
-    antibodies = [
-        'MNQDSRHVEFMNLAMDQARIAYALGEVPIGAVIVKDDEVIACSYNQTEQLQNPTGHAELLVIESASKKLKTRRLLDCTLYVTLEPCAMCAGAIILSRIPIIYFASKDPKAGAVQSLYELLNDKRLNHQCEVHQGFMAKESSELLSSFFRELREGSILKTKELGNNSEA',  # default
-        'MTDQDYMQLALAQAAEARAAGEVPVGAVIVKDGEVIATGFNRPISRHDPTHHAEIAALRAAATAVGNYRLPGCTLYVTLEPCVMCAGAMMHARIARVVFGARDPKTGACGSVLDLFANTQLNHHAEVVGGVLADDCGTMLSDFFAERRQQSRTEHS',
-        'MSDQAFMRLAMNAAAEAKLVGEVPVGAVVVKDGEVIAVGYNQPIGQHDPTAHAEINALRLAAQKLGNYRLVDCTLYVTLEPCAMCAGAMLHARLARVVFGASDPKTGACGSVMNLFAEKKLNHQTELDGGVLAEECGKMLSSFFAERRQQLRTES',
-        'MDDALTIARQALATGDVPVGALVVNPDGIVIGTGFNEREANNDPTAHAEVVAIRNAAQRLQNSRLDGCTLVVTLEPCAMCAGAIAQSRISSLVFGAWDEKAGAVGSVWDVLRDPRSIFKVEVTAGVREQECAQLLKEFFSDK',
-        'MTHEDAMRIALEEAALAGAKGDVPVGAVILHNGEVIARRHNEREASNDPTAHAEVLALRDASKLLNSWRLSECTLVVTLEPCVMCAGATQSARIGRLVYGAANFEAGATASLYNVMSDPRLGHNPPVEHGVLAAESAALLKEFFGSKRS',
-        'MNQDSRHVEFMNLAMDQARIAYALGEVPIGAVIVKDDEVIACSYNQTEQLQNPTGHAELLVIESASKKLKTRRLLDCTLYVTLEPCAMCAGAIILSRIPIIYFASKDPKAGAVQSLYELLNDKRLNHQCEVHQGFMAKESSELLSSFFRELREGSILKTKELGNNSEA',  # replicated, no use
-        'MTGQEDKHFMKLALAQAKAGALAGEVPVGAVVVKNGEVIAVAHNAPLGLKDPTAHAEINALRLAAQNLDNYRLEGCTLYVTLEPCAMCSGAAMHARLSRLVYGAPEPKTGAAGSVLNLFDNLQLNHHTQITGGVLAAECVQELQTFFEMRREQHKASKVGNTA',
-        'MVSPQDESFMRLAILQAQKAAACNEVPVGAVLVFDDQVIGQGYNQPIRLHDPSAHAEMMAIREAAKSLENYRIPQSTLYVTLEPCAMCCGAILHARVKRVVFGAADPKTGMAGSVDNLFDLKAINHQTDIEGGVLADECGNLLKEFFKQRRS',
-        'MNSTASLDQRFMRMALEQGALAAKNGEVPVGAVVVCDDEVVAVGANAPIGDHDPTAHAEIIALRAAAKTLGNYRLPDCRLYVTLEPCAMCSGAIFHARLSEVIYGAPDPKTGAAGSALDLYSNRSINHQTLIRGGVMADECGQTLQAFFARRRTQQREGSGL',
-        'MRLALAQAVSAGDAGEVPVGAIVVKDGEVIGRGANAPISRHDPSAHAEIVALRQAADRLGNYRLNDCTVYVTLEPCAMCSGAMFHARIREVVFGASDPKTGVAGSVTNLYDTPQLNHHTTVRGGVLATECGQLLQDFFAHRRQRGRASDALDSSDAPQ',
-        'MREALALAGKAAAVGEVPVGAVVVLDGKIVGRGFNQPISGCDPTAHAEIVALRDAAKTLGNYRLVNASLYVTIEPCSMCAGAIVHARIKRLVYGAVEPKAGVAASQQDFFAQPFLNHRVEVQGGVLEEQCRELLQEFFRSRRLGK',
-        'MINPFNDIYFMKQALIEAHKALEEGEVPVGAVVVAGNQIIGKGHNLTEKLSDVTAHAEIQAITAASNFLGAKYLKECTLYVTLEPCSMCAGALYWSQIGKVVYGASDERRGANRFPPGLYHPNTVLIYGVEGEACSSLLKQFFQSKR',
-        'MHDDTYFMKAALEQAQIAFDLGEIPIGAVVVWDQKIIARGHNQTEQLKDPTAHAEMIAITAACNQIGSKYLSEATVYVTVEPCLMCTGALYWSKVKHIVFGASDEKNGYQKHTKEQWPFHPKASLTKGIMANECAQLMKDFFSTKR',
-        'MSNPVFIEAMRKSLELAAKASQQGDIPVGAVVLNPAGEIVGRGHNTREVDNDPMNHAEIVAMREAANANSSWRLDGHTLVVTLEPCTMCAGAAVQARIGRIVFGAFDDKAGAVGSLWDVVRDRRLPHRPEVVSGVLADECAAILSEFFKTQR',
-        'MNEYQHMSFMQLAYEQAEIAYSQGEVPIGAVIVKNNEVIASAYNQTEHHQNPIGHAEILAIERAATILQTRRLTDCTLYVTLEPCAMCAGAIVLSRIPIVYFASKDAKAGAVHSLYELLNDTRLNHQCKIHAGLMHGECSTLLSMFFKQLREGHIAKTHQHRQNREE',
-        'MSADEIQGFDWQPDVFYMQSALRCAQKAAAADEVPIGAVIVRNGEIIGRAWNQVEMLKDATAHAEMLAITQAEAAVGDWRLNECDLYVTKEPCPMCAGAIVLSRLRRVVFGCGDPKAGAAGGWINLLQSEPLNHRCEVTGGVLGEESAALLRQFFGKKRAPISES',
-        'MSDAEIQGFDWQPDVFYMQSALRCARKAAAADEVPIGAVIVRHGEVIARAWNQVEMLKDATAHAEMLAITQAEAAVGDWRLNECDLYVTKEPCPMCAGAIVLARLRRVVFGCPDPKGGAAGGWINLLQSAPLNHRCEVTSGVLGEESATLLRQFFGKKRAPISES',
-    ]
-    proteins, ranges = [], []
-    for i in idx:
-        assert i != 5
-        if i > 16:
-            print('[NOTE] This is not a seed, but a mid-seed!')
-            antibodies = [
-                'MSNPVFIEAMRKSLELAAKASIQGDIPVGAAVLNPAGEIVARGHTTREVDNDPCNHAEIVAMREAANGNRSVRLDGHTLVHTLEGCTMSAGAVVQARIGRIVFGAFDYKAGAYGSLWDVVRDRRLLHRHEVRSGVLADECAAMLSVFCKTQR',
-                'MNEYQHMSFMQLPYEQAEIAYSQGFSPIWAVIVKNNEVIASAYNCTEMCQNPIGHAEIGAISRAHTIHGTVRLTDCTQFVTLEECAMCAGAIVLSRIGISYFASKDAKAGAVHSLVELLNDTRLNHQCKIHAGLMHGECSTLLSMFFKQLREGPIAKTHQHRQNREE',
-                'MNEYQHMTFMQGAYEQAEIAYSQGEVPIGAVIVKNNCVIAFAYNQTEHHQRPIGHALIDPIERAATILQTRRLCDITLYVTLEPCWMWAVALVLSRIPIVCFASCDAKAGAVHSLYELLNDTRLKHQCKIHAGLMHGECSTLLSMFFKQLREGVIAKTHQHPQNVEE',
-                'MNEYEHMSFMQLAYEQAEIAYSQGEEPIGAVISKNNEVIASYYNQTEHCQNPIGHAEIVAYNRAATIKQTFRLGDCTLYVTLEPCAMCAGDIVLSRIIIVLFASKDAKAGAVQSLYELLNDTRLNHQCKIHAGLMHGECSTWLSMFFKQLREGTIANTHQHRQGREL',
-            ]
-            i -= 17
-        proteins.append(antibodies[i])
-        ranges.append([1, len(antibodies[idx])])
-    return proteins, ranges
+    pool_dict = {
+        14: [
+            'MNEYQHMSFMQLAYEQAEIAYSQGEVPIGAVIVKNNEVIASAYNQTEHHQNPIGHAEILAIERAATILQTRRLTDCTLYVTLEPCAMCAGAIVLSRIPIVYFASKDAKAGAVHSLYELLNDTRLNHQCKIHAGLMHGECSTLLSMFFKQLREGHIAKTHQHRQNREE',  # p14
+            'MNEYQHMTFMQGAYEQAEIAYSQGEVPIGAVIVKNNCVIAFAYNQTEHHQRPIGHALIDPIERAATILQTRRLCDITLYVTLEPCWMWAVALVLSRIPIVCFASCDAKAGAVHSLYELLNDTRLKHQCKIHAGLMHGECSTLLSMFFKQLREGVIAKTHQHPQNVEE',  # p14_iter19814
+            'MNHYQHMSFMQLPYRQAEIAYSQGFSPIAAVIVKNNEVIASAYNNTEMCQNPIGHAEKAAISRAKTCHGTVRLTLCTKFVTLEECAMCAGAIVLSRIGISYFASKDAKAGAEHSLVELLNDTRLNHQCKIHAGLMHDPCSTLTSLFFENLREGPYIKTHQHRQNRPE',  # p18_iter9363
+        ]
+    }
+    pool = pool_dict[idx]
+    assert all([len(pool[0]) == len(pool[i]) for i in range(len(pool))])
+    return pool, len(pool[0])
+
 
 def sample(args):
-    antibody, limit_range = get_protein(args.protein)
-    TASK = "fixedseqs_fold"
+    antibody, length = get_protein(args.protein)
+    TASK = "stage_Astar_fold"
     save_interval = 1
-    conf_nonlinear = ['relu', 'leakyrelu', '2', '3', None][4]
-    conf_w = [-1]
-    focus = [False, [[7, 150]]][0]
+    focus = [False, [[7, length-17]]][1]
     str_heur = 'Heur_' if args.heuristic_evolution else ''
     str_conf_focus= 'focus-' if focus else ''
-    str_conf_w = 'conf' if not conf_nonlinear else conf_nonlinear
-    folder_name = f'TadA-{args.protein}_fold-i{args.num_recycles}_I-{args.iteration}_Mute{args.max_mute}_{str_heur}{str_conf_focus}{str_conf_w}{conf_w[0]}_Activity{args.activity_w[0]}_T{args.temperature}-{args.temperature_step_size}_seed{args.seed}'
+    folder_name = f'TadA-{args.protein}_fold-i{args.num_recycles}_I-{args.iteration}_{str_heur}{str_conf_focus}conf_Activity{args.activity_w[0]}_T{args.temperature}-{args.temperature_step_size}_seed{args.seed}'
     path = f'output/{folder_name}/sequences.fasta'
     print(path)
     pdb_dir = f'output/{folder_name}/pdb'
@@ -98,7 +69,7 @@ def sample(args):
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
         cfg = hydra.compose(
-            config_name="config_TadA",
+            config_name="config_Astar_TadA",
             overrides=[
                 f"task={TASK}",
                 f"seed={args.seed}",
@@ -107,21 +78,19 @@ def sample(args):
                 "seq_init_random=False",
                 f"+folder_name={folder_name}",
                 f"+regressor_cfg_path={regressor_cfg_path}",
-                f"+tasks.fixedseqs_fold.max_mute={args.max_mute}",
-                f"tasks.fixedseqs_fold.keep_best={args.keep_best}",
-                f'tasks.fixedseqs_fold.path={path}',
-                f'tasks.fixedseqs_fold.limit_range={limit_range}',
-                f'tasks.fixedseqs_fold.pdb_dir={pdb_dir}',
-                f"+tasks.fixedseqs_fold.focus={focus}",
-                f'tasks.fixedseqs_fold.save_interval={save_interval}',
-                f'+tasks.fixedseqs_fold.heuristic_evolution={args.heuristic_evolution}',
-                f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_w={conf_w}',
-                f'tasks.fixedseqs_fold.accept_reject.energy_cfg.falsePOS_w={args.activity_w}',
-                f'tasks.fixedseqs_fold.accept_reject.energy_cfg.conf_nonlinear={conf_nonlinear}',
-                f'tasks.fixedseqs_fold.accept_reject.energy_cfg.num_recycles={args.num_recycles}',
-                f'tasks.fixedseqs_fold.accept_reject.temperature.initial={args.temperature}',
-                f'tasks.fixedseqs_fold.accept_reject.temperature.step_size={args.temperature_step_size}',
-                f'tasks.fixedseqs_fold.num_iter={args.iteration}'  # DEBUG - use a smaller number of iterations
+                f"tasks.stage_Astar_fold.keep_best={args.keep_best}",
+                f'tasks.stage_Astar_fold.path={path}',
+                f'tasks.stage_Astar_fold.limit_range={[[1, length]]}',
+                f'tasks.stage_Astar_fold.pdb_dir={pdb_dir}',
+                f"+tasks.stage_Astar_fold.focus={focus}",
+                f'tasks.stage_Astar_fold.save_interval={save_interval}',
+                f'+tasks.stage_Astar_fold.heuristic_evolution={args.heuristic_evolution}',
+                f'tasks.stage_Astar_fold.accept_reject.energy_cfg.conf_w={conf_w}',
+                f'tasks.stage_Astar_fold.accept_reject.energy_cfg.falsePOS_w={args.activity_w}',
+                f'tasks.stage_Astar_fold.accept_reject.energy_cfg.num_recycles={args.num_recycles}',
+                f'tasks.stage_Astar_fold.accept_reject.temperature.initial={args.temperature}',
+                f'tasks.stage_Astar_fold.accept_reject.temperature.step_size={args.temperature_step_size}',
+                f'tasks.stage_Astar_fold.num_iter={args.iteration}'  # DEBUG - use a smaller number of iterations
             ])
 
     # Create a designer from configuration
