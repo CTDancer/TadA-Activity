@@ -14,6 +14,7 @@ from utils.scheduler import SchedulerSpec, to_scheduler, set_scheduler_repo
 from utils.fold import get_xyz, calc_fold_conf, calc_distance
 from utils.sampling import set_rng_seeds
 from utils.fixedseq_ESMFold import stage_fixedseqs_fold
+from utils.Astar_ESMFold import stage_Astar_fold
 from utils.gearnet import bio_load_pdb, load_config
 
 
@@ -94,7 +95,7 @@ class Designer:
         pdbfile = self.struct_model.output_to_pdb(self.fold_output)
         if not os.path.exists('output/tmp'):
             os.makedirs('output/tmp')
-        idx = self.cfg.tasks.fixedseqs_fold.folder_name
+        idx = self.cfg.folder_name
         tmp_path = f'output/tmp/regressor_tmp_{idx}.pdb'
         with open(tmp_path, 'w') as f:
             f.write(pdbfile[0])
@@ -189,6 +190,8 @@ class Designer:
         design_cfg = self.cfg.tasks[self.cfg.task]
         if self.cfg.task == 'fixedseqs_fold':
             stage_fixedseqs_fold(self, design_cfg)
+        elif self.cfg.task == 'stage_Astar_fold':
+            stage_Astar_fold(self, design_cfg)
         else:
             raise ValueError(f'Invalid task: {self.cfg.task}')
 

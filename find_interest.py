@@ -9,6 +9,7 @@ from tqdm import tqdm
 from scipy.spatial import ConvexHull
 from utils.icp import calc_struct_sim
 
+
 def search_interest(antibody, antigen, limit_range, len_insterest, mode='brute'):
     if isinstance(len_insterest, int):
         len_insterest = [len_insterest]

@@ -1,0 +1,70 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+seed: 0
+num_seqs: 1
+test_mode: False
+allow_missing_residue_coords: True
+# suppress_AA: 'C'
+disable_cuda: False
+cuda_device_idx:  # Set to numberic value to override default GPU device used.
+task: fixedseqs_fold  # fixedbb or free_generation or fixedpos
+free_generation_length: 100
+seq_init_random: False
+# antibody: MSEVEFSHEYWMRHALTLAKRARDEREVPVGAVLVLNNRVIGEGWNRAIGLHDPTAHAEIMALRQGGLVMQNYRLIDATLYVTFEPCVMCAGAMIHSRIGRVVFGVRNSKRGAAGSLMNVLNYPGMNHRVEITEGILADECAALLCDFYRMPRQVFNAQKKAQSSIN
+antibody: MNQDSRHVEFMNLAMDQARIAYALGEVPIGAVIVKDDEVIACSYNQTEQLQNPTGHAELLVIESASKKLKTRRLLDCTLYVTLEPCAMCAGAIILSRIPIIYFASKDPKAGAVQSLYELLNDKRLNHQCEVHQGFMAKESSELLSSFFRELREGSILKTKELGNNSEA
+debug: False
+
+tasks:
+  fixedseqs_fold:
+    num_iter: 170000
+    keep_best: 100
+    # Accept/Reject
+    accept_reject:
+      energy_cfg:
+        dist_w: 0
+        selection: min
+        reduction: mean
+        fold_w: [0]  # later sum
+        conf_w: [-1]  # later sum
+        falsePOS_w: [1]  # later sum
+        num_recycles: 1  # 1,2,3,4
+        conf_nonlinear:  # 'relu', 'leakyrelu', '2', '3'
+      temperature:
+        scheduler: StepLR
+        step_size: 4000
+        gamma: 0.5
+        initial: 8
+    len_linker: 0
+    limit_range: [[1, 168]]
+    antigen: ['']
+    objects: [[0, 0]]
+    path: '.'
+    pdb_dir: '.output/pdb'
+    save_interval: 100
+    limit_range_random_init: False
+
+
+
+# Hydra config
+hydra:
+  job_logging:
+    formatters:
+      colorlog:
+        datefmt: "%m-%d %H:%M:%S"
+    handlers:
+      file:
+        class: logging.FileHandler
+        mode: w
+        filename: logging.l
+      console:
+        class: logging.StreamHandler
+        stream: ext://sys.stdout
+
+  hydra_logging:
+    handlers:
+      console:
+        class: logging.StreamHandler
+        stream: ext://sys.stdout  
