@@ -24,13 +24,38 @@ def substitute(s: str, i: int, tar: str):
     s = "".join(s)
     return s
 
+def resume_module(state_dict):
+    queue_activity = queue.PriorityQueue()  # (-act, seq, conf)
+    with open(os.path.join(state_dict, 'queue_sequences.fasta'), 'r') as f:
+        lines = f.readlines()
+        for l in range(0, len(lines), 2):
+            act, conf = lines[l].strip().split('_')
+            act = float(act.split('-')[1])
+            conf = float(conf.split('-')[1])
+            queue_activity.put((- act, lines[l + 1].strip(), conf))
+
+    visited = set()
+    with open(os.path.join(state_dict, 'sequences.fasta'), 'r') as f:
+        lines = f.readlines()
+        for l in range(0, len(lines), 2):
+            visited.add(lines[l + 1].strip())
+            
+    best_seqs = queue.PriorityQueue()  # (act, seq, conf)
+    with open(os.path.join(state_dict, 'best_sequences.fasta'), 'r') as f:
+        lines = f.readlines()
+        for l in range(0, len(lines), 2):
+            act, conf = lines[l].strip().split('_')
+            act = float(act.split('-')[1])
+            conf = float(conf.split('-')[1])
+            best_seqs.put((act, lines[l + 1].strip(), conf))
+    return queue_activity, visited, best_seqs
+
 
 @torch.no_grad()
 def stage_Astar_fold(self, cfg, disable_tqdm=False):
     """Astar search"""
     vocab = residue_constants.restypes
     K = len(vocab)
-    L =  len(self.x_seqs)
 
     # restricted regions to mutate
     choices = []
@@ -41,12 +66,19 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
     self.queue_activity = queue.PriorityQueue()  # (-act, seq, conf)
     self.best_seqs = queue.PriorityQueue()  # (act, seq, conf)
     self.best_activity = 0
-    for seq in self.x_seqs:
-        self.queue_activity.put((-1.0, seq, 0.8))
-    self.visited = dict()
+    
+    # load from a queue
+    if isinstance(self.x_seqs, list):
+        for seq in self.x_seqs:
+            self.queue_activity.put((-1.0, seq, 0.8))
+        self.visited = set()
+    elif isinstance(self.x_seqs, str):
+        self.queue_activity, self.visited, self.best_seqs = resume_module(self.x_seqs)
     
     print(f'Init queue: {self.queue_activity.qsize()}')
-    print(f'Mutation range: {cfg.limit_range} / {L}')
+    print(f'Init visited: {len(self.visited)}')
+    print(f'Init best: {self.best_seqs.qsize()}')
+    print(f'Mutation range: {cfg.limit_range}')
 
     itr = self.stepper(range(cfg.num_iter), cfg=cfg)
     itr = tqdm(itr, total=cfg.num_iter, disable=disable_tqdm)
@@ -91,10 +123,18 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
 
         total_loss, logs = self.calc_total_loss(xp, s_cfg)
         activity, confidence = logs['activity'], logs['fold_conf']
-        self.visited[xp] = (activity, confidence)
+        self.visited.add(xp)
         
         if confidence >= s_cfg.conf_threshold:
             self.queue_activity.put((-activity, xp, confidence))
+            
+            if len(self.queue_activity.queue) > 2 * s_cfg.queue_size:
+                queue_tmp = queue.PriorityQueue()  # (-act, seq, conf)
+                for _ in range(s_cfg.queue_size):
+                    queue_tmp.put(self.queue_activity.get())
+                del self.queue_activity
+                self.queue_activity = queue_tmp
+                
 
         if len(self.best_seqs.queue) < s_cfg.keep_best or activity > self.best_seqs.queue[0][0]:
             self.best_seqs.put((activity, xp, confidence))

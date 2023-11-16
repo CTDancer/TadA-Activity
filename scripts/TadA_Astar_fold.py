@@ -21,6 +21,8 @@ def get_args():
                         help="Number of recycles to fold the protein structure. The higher, the more accurate.")
     parser.add_argument("--keep_best", type=int, default=1500,
                         help="Number of proteins with top losses during the generation. The higher, the more are saved.")
+    parser.add_argument("--queue_size", type=int, default=1000,
+                        help="Number of protein seeds to hold in a queue. The higher, the more are saved.")
     # parser.add_argument("--max_mute", type=int, default=30,
     #                     help="Maximum different AA numbers from the init sequence. (0 for no limit)")
     parser.add_argument("--conf_threshold", type=float, default=0.75,
@@ -52,20 +54,26 @@ def get_protein(idx):
 
 
 def sample(args):
-    antibody, length = get_protein(args.protein)
+    if args.protein > 0:
+        antibody, length = get_protein(args.protein)
+    else:
+        antibody = '/home/ubuntu/scratch/jingao/Interact/output/TadA-14_fold-i4_I-2000000_B-1500_focus-Thresh0.75_decline-0.999_conf_seed1'
+        length = 167
     TASK = "stage_Astar_fold"
     save_interval = 1
     focus = [False, [[7, length-17]]][1]
     str_heur = 'Heur_' if args.heuristic_evolution else ''
     str_conf_focus= 'focus-' if focus else ''
-    folder_name = f'TadA-{args.protein}_fold-i{args.num_recycles}_I-{args.iteration}_B-{args.keep_best}_{str_heur}{str_conf_focus}Thresh{args.conf_threshold}_decline-{args.decline_rate}_conf_seed{args.seed}'
+    folder_name = f'TadA-{args.protein}_fold-i{args.num_recycles}_I-{args.iteration}_B-{args.keep_best}_Q-{args.queue_size}_{str_heur}{str_conf_focus}Thresh{args.conf_threshold}_decline-{args.decline_rate}_conf_seed{args.seed}'
+    regressor_cfg_path = 'conf/activity_esm_gearnet.yaml'
+    
+    # NOTE: Do not change, because the resume function needs the basenames.
     path = f'output/{folder_name}/sequences.fasta'
     print(path)
     best_path = f'output/{folder_name}/best_sequences.fasta'
     print(best_path)
     queue_path = f'output/{folder_name}/queue_sequences.fasta'
     print(queue_path)
-    regressor_cfg_path = 'conf/activity_esm_gearnet.yaml'
 
     # Load hydra config from config.yaml
     with hydra.initialize_config_module(config_module="conf"):
@@ -79,6 +87,7 @@ def sample(args):
                 "seq_init_random=False",
                 f"+folder_name={folder_name}",
                 f"+regressor_cfg_path={regressor_cfg_path}",
+                f"tasks.stage_Astar_fold.queue_size={args.queue_size}",
                 f"tasks.stage_Astar_fold.keep_best={args.keep_best}",
                 f'tasks.stage_Astar_fold.path={path}',
                 f'+tasks.stage_Astar_fold.best_path={best_path}',
