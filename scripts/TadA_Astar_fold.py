@@ -25,6 +25,8 @@ def get_args():
     #                     help="Maximum different AA numbers from the init sequence. (0 for no limit)")
     parser.add_argument("--conf_threshold", type=float, default=0.75,
                         help="Confidence threshold to decide whether to take the protein.")
+    parser.add_argument("--decline_rate", type=float, default=0.999,
+                        help="Decline rate for each selection from the queue.")
     parser.add_argument("--heuristic_evolution", type=bool, default=False,
                         help="Whether to use the ESM as a generalist heuristic.")
     # parser.add_argument("--activity_w", nargs="+", type=float, default=[-0.1],
@@ -56,11 +58,13 @@ def sample(args):
     focus = [False, [[7, length-17]]][1]
     str_heur = 'Heur_' if args.heuristic_evolution else ''
     str_conf_focus= 'focus-' if focus else ''
-    folder_name = f'TadA-{args.protein}_fold-i{args.num_recycles}_I-{args.iteration}_{str_heur}{str_conf_focus}conf_seed{args.seed}'
+    folder_name = f'TadA-{args.protein}_fold-i{args.num_recycles}_I-{args.iteration}_B-{args.keep_best}_{str_heur}{str_conf_focus}Thresh{args.conf_threshold}_decline-{args.decline_rate}_conf_seed{args.seed}'
     path = f'output/{folder_name}/sequences.fasta'
     print(path)
     best_path = f'output/{folder_name}/best_sequences.fasta'
     print(best_path)
+    queue_path = f'output/{folder_name}/queue_sequences.fasta'
+    print(queue_path)
     regressor_cfg_path = 'conf/activity_esm_gearnet.yaml'
 
     # Load hydra config from config.yaml
@@ -78,7 +82,9 @@ def sample(args):
                 f"tasks.stage_Astar_fold.keep_best={args.keep_best}",
                 f'tasks.stage_Astar_fold.path={path}',
                 f'+tasks.stage_Astar_fold.best_path={best_path}',
+                f'+tasks.stage_Astar_fold.queue_path={queue_path}',
                 f'tasks.stage_Astar_fold.conf_threshold={args.conf_threshold}',
+                f'tasks.stage_Astar_fold.decline_rate={args.decline_rate}',
                 f'tasks.stage_Astar_fold.limit_range={[[1, length]]}',
                 f"+tasks.stage_Astar_fold.focus={focus}",
                 f'tasks.stage_Astar_fold.save_interval={save_interval}',

@@ -42,7 +42,7 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
     self.best_seqs = queue.PriorityQueue()  # (act, seq, conf)
     self.best_activity = 0
     for seq in self.x_seqs:
-        self.queue_activity.put((-0.001, seq, 0.8))
+        self.queue_activity.put((-1.0, seq, 0.8))
     self.visited = dict()
     
     print(f'Init queue: {self.queue_activity.qsize()}')
@@ -55,7 +55,8 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
         alphabet = Alphabet.from_architecture('ESM-1b')
         
     for step, s_cfg in itr:
-        x_act, x, x_conf = self.queue_activity.queue[0]
+        x_act, x, x_conf = self.queue_activity.get()
+        self.queue_activity.put((x_act * s_cfg.decline_rate, x, x_conf))
 
         if not heur:
             plans = [[p, a] for p in range(len(choices)) for a in range(K)]
@@ -89,7 +90,7 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
                 pos_prob[choices.index(pos)] = 0
 
         total_loss, logs = self.calc_total_loss(xp, s_cfg)
-        confidence, activity = logs['fold_conf'], logs['activity']
+        activity, confidence = logs['activity'], logs['fold_conf']
         self.visited[xp] = (activity, confidence)
         
         if confidence >= s_cfg.conf_threshold:
@@ -104,6 +105,10 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
             with open(cfg.best_path, 'w') as f:
                 for act, seq, conf in sorted(self.best_seqs.queue, key = lambda x: -x[0]):
                     f.write(f'>act-{act}_conf-{conf}\n')
+                    f.write(f'{seq}\n')
+            with open(cfg.queue_path, 'w') as f:
+                for act, seq, conf in sorted(self.queue_activity.queue[:100]):
+                    f.write(f'>act-{-act}_conf-{conf}\n')
                     f.write(f'{seq}\n')
 
         # show and save mid outputs

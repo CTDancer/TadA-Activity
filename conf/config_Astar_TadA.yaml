@@ -40,6 +40,7 @@ tasks:
     objects: [[0, 0]]
     path: '.'
     conf_threshold: 0.75
+    decline_rate: 0.999
     pdb_dir: '.output/pdb'
     save_interval: 100
 
