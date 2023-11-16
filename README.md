@@ -5,8 +5,9 @@ This repository is based on [lm-design](https://github.com/facebookresearch/esm/
 # Installation
 
 ```bash
-conda create -n AIGP_gj python=3.9 -y
+conda create -n AIGP_gj python=3.8 -y
 conda activate AIGP_gj
+pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
 pip install -r requirements.txt
 ```
 

@@ -15,7 +15,7 @@ seq_init_random: False
 debug: False
 
 tasks:
-  fixedseqs_fold:
+  stage_Astar_fold:
     num_iter: 170000
     keep_best: 100
     # Accept/Reject
@@ -39,6 +39,7 @@ tasks:
     antigen: ['']
     objects: [[0, 0]]
     path: '.'
+    conf_threshold: 0.75
     pdb_dir: '.output/pdb'
     save_interval: 100
 

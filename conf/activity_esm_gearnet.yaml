@@ -2,7 +2,7 @@ dataset_path: {{ dataset }}
 
 dataset:
   class: Vactivity
-  path: ~/scratch/jingao/Protein-Activity-Prediction/data/20230927_2k
+  path: ~/scratch/jingao/Interact/data/20230927_2k
   atom_feature: null
   bond_feature: null
   transform:
