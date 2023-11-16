@@ -38,8 +38,8 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
         choices += list(range(*i))
 
     # print the loaded protein sequence
-    self.queue_activity = queue.PriorityQueue()
-    self.best_seqs = queue.PriorityQueue()
+    self.queue_activity = queue.PriorityQueue()  # (-act, seq, conf)
+    self.best_seqs = queue.PriorityQueue()  # (act, seq, conf)
     self.best_activity = 0
     for seq in self.x_seqs:
         self.queue_activity.put((-0.001, seq, 0.8))
@@ -93,8 +93,8 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
         self.visited[xp] = (activity, confidence)
         
         if confidence >= s_cfg.conf_threshold:
-            self.queue_activity.put((activity, xp))
-        
+            self.queue_activity.put((-activity, xp, confidence))
+
         if len(self.best_seqs.queue) < s_cfg.keep_best or activity > self.best_seqs.queue[0][0]:
             self.best_seqs.put((activity, xp, confidence))
             while len(self.best_seqs.queue) > s_cfg.keep_best:
