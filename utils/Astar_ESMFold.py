@@ -65,15 +65,15 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
     # print the loaded protein sequence
     self.queue_activity = queue.PriorityQueue()  # (-act, seq, conf)
     self.best_seqs = queue.PriorityQueue()  # (act, seq, conf)
+    self.visited = set()
     self.best_activity = 0
     
     # load from a queue
-    if isinstance(self.x_seqs, list):
-        for seq in self.x_seqs:
-            self.queue_activity.put((-1.0, seq, 0.8))
-        self.visited = set()
-    elif isinstance(self.x_seqs, str):
+    if isinstance(self.x_seqs, str):
         self.queue_activity, self.visited, self.best_seqs = resume_module(self.x_seqs)
+    else:
+        for seq in self.x_seqs:
+            self.queue_activity.put((-1.0, seq, 0.9))
     
     print(f'Init queue: {self.queue_activity.qsize()}')
     print(f'Init visited: {len(self.visited)}')

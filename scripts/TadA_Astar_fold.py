@@ -57,7 +57,7 @@ def sample(args):
     if args.protein > 0:
         antibody, length = get_protein(args.protein)
     else:
-        antibody = '/home/ubuntu/scratch/jingao/Interact/output/TadA-14_fold-i4_I-2000000_B-1500_focus-Thresh0.75_decline-0.999_conf_seed1'
+        antibody = '/home/ubuntu/scratch/jingao/Interact/output/TadA-14_fold-i4_I-2000000_B-1500_Heur_focus-Thresh0.75_decline-0.999_conf_seed1'
         length = 167
     TASK = "stage_Astar_fold"
     save_interval = 1
