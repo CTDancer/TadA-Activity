@@ -1,10 +1,11 @@
 import numpy as np
 import torch
-
+import pdb
 from openfold.utils.feats import atom14_to_atom37
 
 
 def calc_fold_conf(x, plddt, cfg):
+    # pdb.set_trace()
     conf = []
     l_ag = [len(i) for i in cfg.antigen]
     for a in range(len(l_ag)):
@@ -20,6 +21,22 @@ def calc_fold_conf(x, plddt, cfg):
         conf.append(confidence)
     return torch.tensor(conf)
 
+def calc_fold_conf_rf(x, plddt, cfg):
+    pdb.set_trace()
+    conf = []
+    l_ag = [len(i) for i in cfg.antigen]
+    for a in range(len(l_ag)):
+        assert plddt.shape[0] == l_ag[a] + len(x)
+        if cfg.get('focus_on_antigen', False):
+            idx = list(range(*cfg.objects[a]))
+        elif cfg.get('focus', None):
+            idx = list(range(*cfg.focus[a]))
+        else:
+            idx = list(range(l_ag[a] + cfg.len_linker, l_ag[a] + len(x))) + \
+                list(range(*cfg.objects[a]))
+        confidence = plddt[idx].mean()
+        conf.append(confidence)
+    return torch.tensor(conf)
 
 def calc_distance(xyz, antigen, limit_range, objects, selection='min', reduction='mean'):
     if isinstance(antigen, str):

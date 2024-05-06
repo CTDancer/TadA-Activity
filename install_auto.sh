@@ -3,8 +3,8 @@ which pip
 pip install wandb
 echo "[Finish] wandb"
 
-# cuda_version=$(python -c "import torch; print(torch.version.cuda)")
-# pytorch_version=$(python -c "import torch; print(torch.__version__)")
+cuda_version=$(python -c "import torch; print(torch.version.cuda)")
+pytorch_version=$(python -c "import torch; print(torch.__version__)")
 cuda_version="118"
 pytorch_version="2.0.0"
 # pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
@@ -30,14 +30,15 @@ echo "[Finish] biopython"
 conda install -y easydict pyyaml -c conda-forge
 echo "[Finish] easydict pyyaml"
 
-cd ../AE_install
-git clone https://github.com/aqlaboratory/openfold.git
+# cd ../AE_install
+# git clone https://github.com/aqlaboratory/openfold.git
+cd ..
 cd openfold
 python setup.py install
 
-cd ..
-git clone https://github.com/DeepGraphLearning/torchdrug.git
-cd torchdrug
-which pip
-python setup.py develop
-cd ../../Au*
+# cd ..
+# git clone https://github.com/DeepGraphLearning/torchdrug.git
+# cd torchdrug
+# which pip
+# python setup.py develop
+# cd ../../Au*

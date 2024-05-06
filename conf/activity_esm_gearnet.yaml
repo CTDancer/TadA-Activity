@@ -2,7 +2,7 @@ dataset_path: {{ dataset }}
 
 dataset:
   class: Vactivity
-  path: ~/scratch/jingao/Interact/data/20230927_2k
+  path: ~/scratch/tongchen/Interact/data/20230927_2k
   atom_feature: null
   bond_feature: null
   transform:
@@ -52,7 +52,7 @@ task:
   task: "activity"
 
 # checkpoint: {{ ckpt }}
-checkpoint: /home/ubuntu/scratch/jingao/Interact/data/ckpt/model_epoch_21.pth
+checkpoint: /home/ubuntu/scratch/tongchen/Interact/data/ckpt/model_epoch_21.pth
 batch_size: 2
 gpu: 0
 tag: model5

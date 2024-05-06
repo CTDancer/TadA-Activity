@@ -2,6 +2,8 @@ import os
 import time
 import argparse
 import hydra
+import sys
+sys.path.append('/home/ubuntu/scratch/tongchen/Interact')
 from lm_design_fold import Designer
 
 
@@ -57,7 +59,7 @@ def sample(args):
     if args.protein > 0:
         antibody, length = get_protein(args.protein)
     else:
-        antibody = '/home/ubuntu/scratch/jingao/Interact/output/TadA-14_fold-i4_I-2000000_B-1500_Heur_focus-Thresh0.75_decline-0.999_conf_seed1'
+        antibody = '/home/ubuntu/scratch/tongchen/Interact/output/TadA--14_fold-i4_I-2000000_B-1500_Q-1500_focus-Thresh0.75_decline-0.999_conf_seed1'
         length = 167
     TASK = "stage_Astar_fold"
     save_interval = 1
@@ -65,7 +67,7 @@ def sample(args):
     str_heur = 'Heur_' if args.heuristic_evolution else ''
     str_conf_focus= 'focus-' if focus else ''
     folder_name = f'TadA-{args.protein}_fold-i{args.num_recycles}_I-{args.iteration}_B-{args.keep_best}_Q-{args.queue_size}_{str_heur}{str_conf_focus}Thresh{args.conf_threshold}_decline-{args.decline_rate}_conf_seed{args.seed}'
-    regressor_cfg_path = 'conf/activity_esm_gearnet.yaml'
+    regressor_cfg_path = 'conf/activity_rf_gearnet.yaml'
     
     # NOTE: Do not change, because the resume function needs the basenames.
     path = f'output/{folder_name}/sequences.fasta'

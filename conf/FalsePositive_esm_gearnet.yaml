@@ -2,7 +2,7 @@ dataset_path: {{ dataset }}
 
 dataset:
   class: falsePOS
-  path: ~/scratch/jingao/Auto-Evolution/data/false_positive
+  path: ~/scratch/tongchen/Auto-Evolution/data/false_positive
   atom_feature: null
   bond_feature: null
   transform:
@@ -19,7 +19,7 @@ task:
     class: FusionNetwork
     sequence_model:
       class: ESM
-      path: ~/scratch/jingao/Auto-Evolution/ckpt/protein-model-weights/esm-model-weights/
+      path: ~/scratch/tongchen/Auto-Evolution/ckpt/protein-model-weights/esm-model-weights/
       model: ESM-2-650M
     structure_model:
       class: GearNet
@@ -52,8 +52,8 @@ task:
   task: "activity"
 
 # checkpoint: {{ ckpt }}
-# checkpoint: /home/dqwang/scratch/jingao/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-23-15-10-27/model_epoch_20.pth
-checkpoint: /home/dqwang/scratch/jingao/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-26-16-03-50/model_epoch_8.pth
+# checkpoint: /home/dqwang/scratch/tongchen/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-23-15-10-27/model_epoch_20.pth
+checkpoint: /home/dqwang/scratch/tongchen/Auto-Evolution/output/false_positive/PropertyPrediction/falsePOS/FusionNetwork/2023-05-26-16-03-50/model_epoch_8.pth
 batch_size: 2
 gpu: 0
 tag: model5

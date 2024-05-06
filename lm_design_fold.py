@@ -9,13 +9,18 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 import esm
 from torchdrug import core, data
+import numpy as np
+import subprocess
+import pdb
 
 from utils.scheduler import SchedulerSpec, to_scheduler, set_scheduler_repo
-from utils.fold import get_xyz, calc_fold_conf, calc_distance
+from utils.fold import get_xyz, calc_fold_conf, calc_distance, calc_fold_conf_rf
 from utils.sampling import set_rng_seeds
 from utils.fixedseq_ESMFold import stage_fixedseqs_fold
 from utils.Astar_ESMFold import stage_Astar_fold
 from utils.gearnet import bio_load_pdb, load_config
+
+from Bio.PDB import PDBParser
 
 
 # make sure script started from the root of the this file
@@ -59,6 +64,7 @@ class Designer:
 
 
     def calc_fold_loss(self, x_seq, antigen, objects, limit_range, selection, reduction, num_recycles):
+        pdb.set_trace()
         l_ag = [len(i) for i in antigen]
 
         output = self.struct_model.infer([ag + x_seq for ag in antigen], num_recycles=num_recycles)
@@ -76,15 +82,79 @@ class Designer:
             selection=selection, reduction=reduction)
 
         return torch.tensor(res), plddt
+    
+    def calc_fold_loss_rf(self, x_seq, antigen, objects, limit_range, selection, reduction, num_recycles):
+        '''
+        Calculate folding loss and structure using RoseTTAFold
+        
+        Only implemented antigen = None
+        '''
+        
+        l_ag = [len(i) for i in antigen]
+        
+        # prepare input.fasta
+        fasta_str = f">167 residues|\n{x_seq}"
+        workdir = "./RoseTTAFold/interact/" 
+        if not os.path.exists(workdir):
+            os.makedirs(workdir)
+            
+        fasta_pth = workdir + "input.fa"
+        with open(fasta_pth, "w") as file:
+            file.write(fasta_str)
+        
+        script_path = "./RoseTTAFold/run_e2e_ver.sh"
+        # script_path = "./RoseTTAFold/e2e.sh"
+        # pdb.set_trace()
+        
+        start_time = time.time()
+        result = subprocess.run([script_path, fasta_pth, workdir], capture_output=True, text=True)
+        print(time.time() - start_time)
+        
+        self.xyz = torch.load("./RoseTTAFold/interact/xyz.pt")
+        idx_pdb = torch.load("./RoseTTAFold/interact/index.pt")
+        lddt = torch.load("./RoseTTAFold/interact/lddt.pt")
+        
+        pdb.set_trace()
+        
+        self.proteins = [bio_load_pdb("./RoseTTAFold/interact/t000_.e2e.pdb")[0]]
+        # parser = PDBParser()
+        # self.structure = parser.get_structure('PDB_structure', "./RoseTTAFold/interact/t000_.e2e.pdb")
+        
+        a3m_fn = "./RoseTTAFold/interact/t000_.msa0.a3m"
+        hhr_fn = "./RoseTTAFold/interact/t000_.hhr"
+        atab_fn = "./RoseTTAFold/interact/t000_.atab" 
+        
+        self.metadata = {"a3m_fn": a3m_fn, "hhr_fn": hhr_fn, "atab_fn": atab_fn}
+        # for filename in os.listdir(workdir):
+        #     file_path = os.path.join(workdir, filename)
+        #     try:
+        #         if os.path.isfile(file_path) or os.path.islink(file_path):
+        #             os.remove(file_path)
+        #     except Exception as e:
+        #         print('Failed to delete %s. Reason: %s' % (file_path, e))
+        
+        # For single protein evolution
+        if sum(l_ag) == 0:
+            return 0, lddt
+        
+        res = calc_distance(self.xyz, antigen, limit_range, objects,
+            selection=selection, reduction=reduction)
+
+        return torch.tensor(res), lddt
+        
 
     def regressor_init(self, regressor_cfg_path):
 
         # init
+        # pdb.set_trace()
         cfg = load_config(regressor_cfg_path)
         dataset = core.Configurable.load_config_dict(cfg.dataset)
+        # pdb.set_trace()
         task = core.Configurable.load_config_dict(cfg.task)
+        # pdb.set_trace()
         task.preprocess(dataset, None, None)
         self.transform = core.Configurable.load_config_dict(cfg.transform)
+        # pdb.set_trace()
         pretrained_dict = torch.load(cfg.checkpoint, map_location=torch.device('cpu'))['model']
         model_dict = task.state_dict()
         task.load_state_dict(pretrained_dict)
@@ -92,6 +162,7 @@ class Designer:
         self.task.eval()
 
     def calc_regressor(self,):
+        pdb.set_trace()
         pdbfile = self.struct_model.output_to_pdb(self.fold_output)
         if not os.path.exists('output/tmp'):
             os.makedirs('output/tmp')
@@ -109,21 +180,33 @@ class Designer:
 
         return pred.cpu()
 
+    def calc_regressor_rf(self,):
+        pdb.set_trace()
+        protein = data.Protein.pack(self.proteins).cuda(self.device)
+        batch = self.transform({"graph": protein, "extra_inputs": self.metadata})
+        with torch.no_grad():
+            pred = self.task.predict(batch)
+
+        return pred.cpu()
+
     def calc_total_loss(self, x, cfg):
         """
             Easy one-stop-shop that calls out to all the implemented loss calculators,
             aggregates logs, and weights total_loss.
         """
-
+        # pdb.set_trace()
         logs = {}
         total_loss = 0
         e_cfg = cfg.accept_reject.energy_cfg
         if e_cfg.fold_w:
-            fold_m_nlls, plddt = self.calc_fold_loss(x, cfg.antigen, cfg.objects, cfg.limit_range,
+            # fold_m_nlls, plddt = self.calc_fold_loss(x, cfg.antigen, cfg.objects, cfg.limit_range,
+            #     e_cfg.selection, e_cfg.reduction, e_cfg.num_recycles)
+            fold_m_nlls, plddt = self.calc_fold_loss_rf(x, cfg.antigen, cfg.objects, cfg.limit_range,
                 e_cfg.selection, e_cfg.reduction, e_cfg.num_recycles)
             fold_m_nlls = (fold_m_nlls * torch.tensor(e_cfg.fold_w)).sum()
             logs['fold_loss'] = fold_m_nlls.item()
-            fold_conf = calc_fold_conf(x, plddt, cfg)
+            # fold_conf = calc_fold_conf(x, plddt, cfg)
+            fold_conf = calc_fold_conf_rf(x, plddt, cfg)
             logs['fold_conf'] = fold_conf.item()
             if e_cfg.conf_nonlinear == 'relu':
                 fold_conf[fold_conf < 0.85] = 0

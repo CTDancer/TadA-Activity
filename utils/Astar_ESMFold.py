@@ -86,6 +86,9 @@ def stage_Astar_fold(self, cfg, disable_tqdm=False):
     if heur:
         alphabet = Alphabet.from_architecture('ESM-1b')
         
+    import pdb
+    # pdb.set_trace()
+        
     for step, s_cfg in itr:
         x_act, x, x_conf = self.queue_activity.get()
         self.queue_activity.put((x_act * s_cfg.decline_rate, x, x_conf))
